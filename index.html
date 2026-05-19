@@ -1,0 +1,1466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ollama Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Syne:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f0f0f;
+  --bg2: #161616;
+  --bg3: #1e1e1e;
+  --bg4: #262626;
+  --border: rgba(255,255,255,0.08);
+  --border2: rgba(255,255,255,0.14);
+  --text: #e8e6e0;
+  --text2: #8a8780;
+  --text3: #5a5855;
+  --accent: #c8f060;
+  --accent2: #a8d040;
+  --danger: #ff5555;
+  --warning: #ffaa33;
+  --info: #55aaff;
+  --success: #55cc88;
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Syne', sans-serif;
+  --radius: 8px;
+  --radius-lg: 12px;
+}
+
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  grid-template-rows: 56px 1fr;
+  grid-template-areas: "header header" "nav main";
+}
+
+/* Header */
+header {
+  grid-area: header;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  gap: 16px;
+}
+
+.logo {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.header-url {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 12px;
+}
+
+.header-url input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  width: 260px;
+}
+
+.header-url input::placeholder { color: var(--text3); }
+
+.btn-connect {
+  background: var(--accent);
+  color: #0f0f0f;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-connect:hover { background: var(--accent2); }
+
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  padding: 4px 10px;
+  background: var(--bg3);
+  border-radius: 20px;
+  border: 1px solid var(--border);
+}
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text3); transition: background 0.3s; }
+.status-dot.connected { background: var(--success); box-shadow: 0 0 6px var(--success); }
+.status-dot.error { background: var(--danger); }
+
+/* Nav */
+nav {
+  grid-area: nav;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.15s;
+  border-left: 2px solid transparent;
+  user-select: none;
+}
+.nav-item:hover { color: var(--text); background: var(--bg3); }
+.nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(200,240,96,0.06); }
+.nav-item i { font-size: 16px; }
+
+.nav-section {
+  padding: 12px 20px 4px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-top: 8px;
+}
+
+/* Main */
+main {
+  grid-area: main;
+  overflow-y: auto;
+  padding: 28px 32px;
+}
+
+.page { display: none; }
+.page.active { display: block; }
+
+/* Page header */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.page-sub {
+  font-size: 13px;
+  color: var(--text2);
+  margin-top: 2px;
+}
+
+/* Cards */
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid var(--border2);
+  background: var(--bg3);
+  color: var(--text);
+}
+.btn:hover { background: var(--bg4); border-color: var(--border2); }
+.btn:active { transform: scale(0.98); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-primary { background: var(--accent); color: #0f0f0f; border-color: transparent; }
+.btn-primary:hover { background: var(--accent2); }
+
+.btn-danger { border-color: rgba(255,85,85,0.3); color: var(--danger); }
+.btn-danger:hover { background: rgba(255,85,85,0.1); }
+
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn i { font-size: 14px; }
+
+/* Form elements */
+input[type="text"], input[type="number"], textarea, select {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color 0.15s;
+  width: 100%;
+}
+input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+input::placeholder, textarea::placeholder { color: var(--text3); }
+select option { background: var(--bg3); }
+textarea { font-family: var(--mono); font-size: 12px; resize: vertical; min-height: 80px; }
+
+.form-row {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.form-row.cols2 { grid-template-columns: 1fr 1fr; }
+.form-row.cols3 { grid-template-columns: 1fr 1fr 1fr; }
+
+label {
+  font-size: 12px;
+  color: var(--text2);
+  margin-bottom: 6px;
+  display: block;
+}
+
+/* Model list */
+.model-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.model-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  transition: border-color 0.15s;
+}
+.model-card:hover { border-color: var(--border2); }
+
+.model-name {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.model-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  color: var(--text2);
+}
+
+.badge.running { background: rgba(85,204,136,0.1); border-color: rgba(85,204,136,0.3); color: var(--success); }
+
+.model-actions { display: flex; gap: 8px; }
+
+/* Table */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text3);
+  border-bottom: 1px solid var(--border);
+}
+td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text2);
+  vertical-align: middle;
+}
+td:first-child { color: var(--text); font-family: var(--mono); font-size: 12px; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--bg3); }
+
+/* Progress */
+.progress-wrap { background: var(--bg4); border-radius: 4px; height: 6px; overflow: hidden; margin-top: 8px; }
+.progress-bar { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.3s; }
+
+/* Chat */
+.chat-messages {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  min-height: 300px;
+  max-height: 400px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.msg {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.msg-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+  color: var(--text2);
+}
+
+.msg.assistant .msg-avatar { background: rgba(200,240,96,0.1); border-color: rgba(200,240,96,0.3); color: var(--accent); }
+
+.msg-content {
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  max-width: 85%;
+  white-space: pre-wrap;
+}
+
+.msg.assistant .msg-content { background: var(--bg2); }
+
+.chat-input-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.chat-input-row textarea { min-height: 60px; }
+
+/* Embed result */
+.embed-result {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  max-height: 200px;
+  overflow-y: auto;
+  word-break: break-all;
+  line-height: 1.7;
+}
+
+/* Pull progress */
+.pull-log {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  max-height: 160px;
+  overflow-y: auto;
+  line-height: 1.8;
+}
+.pull-log .log-line { display: block; }
+.pull-log .log-line.ok { color: var(--success); }
+.pull-log .log-line.err { color: var(--danger); }
+
+/* Info grid */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.info-item {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.info-label { font-size: 11px; color: var(--text3); margin-bottom: 4px; }
+.info-value { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--accent); }
+
+/* Spinner */
+.spinner {
+  width: 14px; height: 14px;
+  border: 2px solid var(--border2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Empty state */
+.empty {
+  text-align: center;
+  padding: 48px 0;
+  color: var(--text3);
+  font-size: 13px;
+}
+.empty i { font-size: 32px; display: block; margin-bottom: 12px; color: var(--text3); }
+
+/* Toast */
+#toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+}
+.toast {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: slideIn 0.2s ease;
+  min-width: 220px;
+}
+.toast.success { border-left: 3px solid var(--success); }
+.toast.error { border-left: 3px solid var(--danger); }
+.toast.info { border-left: 3px solid var(--info); }
+@keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+/* Catalog */
+.catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 10px;
+}
+.catalog-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.15s;
+}
+.catalog-card:hover { border-color: var(--border2); }
+.catalog-card.installed { border-color: rgba(200,240,96,0.25); }
+.catalog-name {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cat-filter.active { background: var(--accent); color: #0f0f0f; border-color: transparent; }
+
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 900;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  width: 560px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.modal-title { font-size: 15px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+.modal pre {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  max-height: 400px;
+  overflow-y: auto;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    ollama manager
+  </div>
+  <div class="header-url">
+    <i class="ti ti-server" style="font-size:14px;color:var(--text3)" aria-hidden="true"></i>
+    <input type="text" id="ollama-url" value="http://localhost:11434" placeholder="http://ollama:11434">
+    <button class="btn-connect" onclick="connect()">Connect</button>
+  </div>
+  <div class="status-badge">
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-text">disconnected</span>
+  </div>
+</header>
+
+<nav>
+  <div class="nav-section">Overview</div>
+  <div class="nav-item active" data-page="dashboard" onclick="nav(this)">
+    <i class="ti ti-layout-dashboard" aria-hidden="true"></i> Dashboard
+  </div>
+
+  <div class="nav-section">Models</div>
+  <div class="nav-item" data-page="models" onclick="nav(this)">
+    <i class="ti ti-box" aria-hidden="true"></i> Local models
+  </div>
+  <div class="nav-item" data-page="running" onclick="nav(this)">
+    <i class="ti ti-player-play" aria-hidden="true"></i> Running
+  </div>
+  <div class="nav-item" data-page="pull" onclick="nav(this)">
+    <i class="ti ti-download" aria-hidden="true"></i> Pull model
+  </div>
+  <div class="nav-item" data-page="copy" onclick="nav(this)">
+    <i class="ti ti-copy" aria-hidden="true"></i> Copy / push
+  </div>
+
+  <div class="nav-item" data-page="catalog" onclick="nav(this)">
+    <i class="ti ti-world" aria-hidden="true"></i> Registry catalog
+  </div>
+
+  <div class="nav-section">Test</div>
+  <div class="nav-item" data-page="chat" onclick="nav(this)">
+    <i class="ti ti-messages" aria-hidden="true"></i> Chat
+  </div>
+  <div class="nav-item" data-page="generate" onclick="nav(this)">
+    <i class="ti ti-wand" aria-hidden="true"></i> Generate
+  </div>
+  <div class="nav-item" data-page="embeddings" onclick="nav(this)">
+    <i class="ti ti-vector" aria-hidden="true"></i> Embeddings
+  </div>
+</nav>
+
+<main>
+
+<!-- DASHBOARD -->
+<div class="page active" id="page-dashboard">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Dashboard</div>
+      <div class="page-sub">Server overview and status</div>
+    </div>
+    <button class="btn" onclick="connect()"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
+  </div>
+  <div class="info-grid" id="dash-info">
+    <div class="info-item">
+      <div class="info-label">Server version</div>
+      <div class="info-value" id="dash-version">—</div>
+    </div>
+    <div class="info-item">
+      <div class="info-label">Local models</div>
+      <div class="info-value" id="dash-model-count">—</div>
+    </div>
+    <div class="info-item">
+      <div class="info-label">Running now</div>
+      <div class="info-value" id="dash-running-count">—</div>
+    </div>
+    <div class="info-item">
+      <div class="info-label">Endpoint</div>
+      <div class="info-value" id="dash-endpoint" style="font-size:11px">—</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><i class="ti ti-player-play" aria-hidden="true"></i> Currently running</div>
+    </div>
+    <div id="dash-running-list"><div class="empty"><i class="ti ti-player-pause" aria-hidden="true"></i>No models running</div></div>
+  </div>
+</div>
+
+<!-- MODELS -->
+<div class="page" id="page-models">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Local models</div>
+      <div class="page-sub">All models available on this server</div>
+    </div>
+    <button class="btn" onclick="loadModels()"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
+  </div>
+  <div id="model-grid-wrap"><div class="empty"><i class="ti ti-box" aria-hidden="true"></i>No models found</div></div>
+</div>
+
+<!-- RUNNING -->
+<div class="page" id="page-running">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Running models</div>
+      <div class="page-sub">Models currently loaded in memory</div>
+    </div>
+    <button class="btn" onclick="loadRunning()"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
+  </div>
+  <div id="running-wrap"><div class="empty"><i class="ti ti-player-pause" aria-hidden="true"></i>No models running</div></div>
+</div>
+
+<!-- PULL -->
+<div class="page" id="page-pull">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Pull model</div>
+      <div class="page-sub">Download a model from the Ollama registry</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="form-row cols2">
+      <div>
+        <label>Model name</label>
+        <input type="text" id="pull-model" placeholder="llama3.2, mistral, gemma2:9b …">
+      </div>
+      <div style="display:flex;align-items:flex-end">
+        <button class="btn btn-primary" onclick="pullModel()" style="width:100%">
+          <i class="ti ti-download" aria-hidden="true"></i> Pull
+        </button>
+      </div>
+    </div>
+    <div id="pull-status" style="display:none">
+      <div id="pull-log" class="pull-log"></div>
+      <div class="progress-wrap"><div class="progress-bar" id="pull-progress" style="width:0%"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- COPY / PUSH -->
+<div class="page" id="page-copy">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Copy / push</div>
+      <div class="page-sub">Clone a local model or push to a registry</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-title"><i class="ti ti-copy" aria-hidden="true"></i> Copy model</div></div>
+    <div class="form-row cols2">
+      <div>
+        <label>Source model</label>
+        <input type="text" id="copy-src" placeholder="llama3.2">
+      </div>
+      <div>
+        <label>Destination name</label>
+        <input type="text" id="copy-dst" placeholder="my-llama3.2">
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="copyModel()"><i class="ti ti-copy" aria-hidden="true"></i> Copy</button>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-title"><i class="ti ti-upload" aria-hidden="true"></i> Push model</div></div>
+    <div class="form-row">
+      <div>
+        <label>Model name (must be in namespace/model format)</label>
+        <input type="text" id="push-model" placeholder="namespace/mymodel">
+      </div>
+    </div>
+    <button class="btn" onclick="pushModel()"><i class="ti ti-upload" aria-hidden="true"></i> Push</button>
+  </div>
+</div>
+
+<!-- CHAT -->
+<div class="page" id="page-chat">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Chat</div>
+      <div class="page-sub">Test conversational inference</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="form-row cols3" style="margin-bottom:16px">
+      <div>
+        <label>Model</label>
+        <select id="chat-model"></select>
+      </div>
+      <div>
+        <label>System prompt (optional)</label>
+        <input type="text" id="chat-system" placeholder="You are a helpful assistant.">
+      </div>
+      <div style="display:flex;align-items:flex-end">
+        <button class="btn btn-sm" onclick="clearChat()" style="width:100%"><i class="ti ti-trash" aria-hidden="true"></i> Clear</button>
+      </div>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="empty" style="margin:auto"><i class="ti ti-messages" aria-hidden="true"></i>Start a conversation</div>
+    </div>
+    <div class="chat-input-row">
+      <textarea id="chat-input" placeholder="Type a message… (Enter to send, Shift+Enter for newline)" rows="2"></textarea>
+      <button class="btn btn-primary" onclick="sendChat()" id="chat-send-btn" style="min-width:80px">
+        <i class="ti ti-send" aria-hidden="true"></i> Send
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- GENERATE -->
+<div class="page" id="page-generate">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Generate</div>
+      <div class="page-sub">Raw completion endpoint</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="form-row cols2" style="margin-bottom:12px">
+      <div>
+        <label>Model</label>
+        <select id="gen-model"></select>
+      </div>
+      <div>
+        <label>Format</label>
+        <select id="gen-format">
+          <option value="">default</option>
+          <option value="json">json</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <label>System prompt (optional)</label>
+      <textarea id="gen-system" rows="2" placeholder="You are a helpful assistant."></textarea>
+    </div>
+    <div style="margin-bottom:12px">
+      <label>Prompt</label>
+      <textarea id="gen-prompt" rows="4" placeholder="Enter your prompt…"></textarea>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:16px">
+      <button class="btn btn-primary" onclick="doGenerate()"><i class="ti ti-wand" aria-hidden="true"></i> Generate</button>
+      <button class="btn btn-sm" onclick="document.getElementById('gen-output').textContent=''">Clear</button>
+    </div>
+    <label>Response</label>
+    <div class="embed-result" id="gen-output" style="min-height:100px"></div>
+  </div>
+</div>
+
+<!-- EMBEDDINGS -->
+<div class="page" id="page-embeddings">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Embeddings</div>
+      <div class="page-sub">Generate and inspect embedding vectors</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="form-row cols2" style="margin-bottom:12px">
+      <div>
+        <label>Model</label>
+        <select id="embed-model"></select>
+      </div>
+      <div>
+        <label>Truncate input</label>
+        <select id="embed-truncate">
+          <option value="true">Yes</option>
+          <option value="false">No</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <label>Input text (one per line = multiple embeddings)</label>
+      <textarea id="embed-input" rows="4" placeholder="The quick brown fox…&#10;Another sentence for comparison…"></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="doEmbed()"><i class="ti ti-vector" aria-hidden="true"></i> Embed</button>
+    <div id="embed-stats" style="margin-top:16px;display:none">
+      <div class="info-grid" style="margin-bottom:12px">
+        <div class="info-item">
+          <div class="info-label">Vectors</div>
+          <div class="info-value" id="embed-count">—</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Dimensions</div>
+          <div class="info-value" id="embed-dims">—</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Prompt tokens</div>
+          <div class="info-value" id="embed-tokens">—</div>
+        </div>
+      </div>
+      <label>Raw vectors (truncated)</label>
+      <div class="embed-result" id="embed-result"></div>
+    </div>
+  </div>
+</div>
+
+<!-- CATALOG -->
+<div class="page" id="page-catalog">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Registry catalog</div>
+      <div class="page-sub">All models available on ollama.com — click to pull</div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <input type="text" id="catalog-search" placeholder="Search models…" style="width:220px" oninput="filterCatalog()">
+      <button class="btn" onclick="loadCatalog()"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px" id="catalog-size-filters">
+    <button class="btn btn-sm cat-filter active" data-filter="all" onclick="setCatFilter(this,'all')">All</button>
+    <button class="btn btn-sm cat-filter" data-filter="small" onclick="setCatFilter(this,'small')">Small (&lt;10 GB)</button>
+    <button class="btn btn-sm cat-filter" data-filter="medium" onclick="setCatFilter(this,'medium')">Medium (10–50 GB)</button>
+    <button class="btn btn-sm cat-filter" data-filter="large" onclick="setCatFilter(this,'large')">Large (&gt;50 GB)</button>
+    <span style="margin-left:auto;font-size:12px;color:var(--text3);align-self:center" id="catalog-count"></span>
+  </div>
+  <div id="catalog-wrap"><div class="empty"><i class="ti ti-world" aria-hidden="true"></i>Click refresh to load catalog</div></div>
+</div>
+
+</main>
+
+<!-- Model detail modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-title">
+      <span id="modal-title-text">Model details</span>
+      <button class="btn btn-sm" onclick="document.getElementById('modal-overlay').classList.remove('open')">
+        <i class="ti ti-x" aria-hidden="true"></i>
+      </button>
+    </div>
+    <pre id="modal-body"></pre>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+let baseUrl = 'http://localhost:11434';
+let chatHistory = [];
+let allModels = [];
+
+function api(path, opts = {}) {
+  return fetch(baseUrl + path, {
+    headers: { 'Content-Type': 'application/json', ...opts.headers },
+    ...opts
+  });
+}
+
+function nav(el) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('page-' + el.dataset.page).classList.add('active');
+  if (el.dataset.page === 'models') loadModels();
+  if (el.dataset.page === 'running') loadRunning();
+  if (el.dataset.page === 'chat' || el.dataset.page === 'generate' || el.dataset.page === 'embeddings') populateModelSelects();
+  if (el.dataset.page === 'catalog' && catalogData.length === 0) loadCatalog();
+}
+
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  const icons = { success: 'ti-check', error: 'ti-alert-circle', info: 'ti-info-circle' };
+  el.innerHTML = `<i class="ti ${icons[type]}" aria-hidden="true"></i> ${msg}`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+function setStatus(ok, version) {
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  dot.className = 'status-dot ' + (ok ? 'connected' : 'error');
+  txt.textContent = ok ? 'v' + version : 'error';
+}
+
+async function connect() {
+  baseUrl = document.getElementById('ollama-url').value.replace(/\/$/, '');
+  document.getElementById('dash-endpoint').textContent = baseUrl;
+  try {
+    const r = await api('/api/version');
+    const d = await r.json();
+    setStatus(true, d.version);
+    document.getElementById('dash-version').textContent = d.version;
+    toast('Connected to Ollama ' + d.version, 'success');
+    await loadDashboard();
+  } catch(e) {
+    setStatus(false, '');
+    toast('Cannot reach ' + baseUrl, 'error');
+  }
+}
+
+async function loadDashboard() {
+  try {
+    const [modR, runR] = await Promise.all([api('/api/tags'), api('/api/ps')]);
+    const modD = await modR.json();
+    const runD = await runR.json();
+    allModels = modD.models || [];
+    const running = runD.models || [];
+    document.getElementById('dash-model-count').textContent = allModels.length;
+    document.getElementById('dash-running-count').textContent = running.length;
+    const runList = document.getElementById('dash-running-list');
+    if (running.length === 0) {
+      runList.innerHTML = '<div class="empty"><i class="ti ti-player-pause" aria-hidden="true"></i>No models running</div>';
+    } else {
+      runList.innerHTML = running.map(m => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+          <span style="font-family:var(--mono);font-size:12px;color:var(--accent)">${m.name}</span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span class="badge running">running</span>
+            <span class="badge">${fmtSize(m.size_vram || m.size)}</span>
+          </div>
+        </div>`).join('');
+    }
+  } catch(e) {}
+}
+
+async function loadModels() {
+  try {
+    const r = await api('/api/tags');
+    const d = await r.json();
+    allModels = d.models || [];
+    const wrap = document.getElementById('model-grid-wrap');
+    if (allModels.length === 0) {
+      wrap.innerHTML = '<div class="empty"><i class="ti ti-box" aria-hidden="true"></i>No models found. Pull one first.</div>';
+      return;
+    }
+    wrap.innerHTML = `<div class="model-grid">${allModels.map(m => `
+      <div class="model-card">
+        <div class="model-name">
+          <span>${m.name}</span>
+        </div>
+        <div class="model-meta">
+          <span class="badge">${fmtSize(m.size)}</span>
+          <span class="badge">${m.details?.parameter_size || ''}</span>
+          <span class="badge">${m.details?.quantization_level || ''}</span>
+        </div>
+        <div class="model-actions">
+          <button class="btn btn-sm" onclick='showModel("${m.name}")'><i class="ti ti-info-circle" aria-hidden="true"></i> Info</button>
+          <button class="btn btn-sm btn-danger" onclick='deleteModel("${m.name}")'><i class="ti ti-trash" aria-hidden="true"></i> Delete</button>
+        </div>
+      </div>`).join('')}</div>`;
+  } catch(e) { toast('Failed to load models', 'error'); }
+}
+
+async function loadRunning() {
+  try {
+    const r = await api('/api/ps');
+    const d = await r.json();
+    const running = d.models || [];
+    const wrap = document.getElementById('running-wrap');
+    if (running.length === 0) {
+      wrap.innerHTML = '<div class="empty"><i class="ti ti-player-pause" aria-hidden="true"></i>No models currently loaded</div>';
+      return;
+    }
+    wrap.innerHTML = `<div class="table-wrap"><table>
+      <thead><tr><th>Model</th><th>Size</th><th>VRAM</th><th>Expires</th></tr></thead>
+      <tbody>${running.map(m => `<tr>
+        <td>${m.name}</td>
+        <td>${fmtSize(m.size)}</td>
+        <td>${fmtSize(m.size_vram)}</td>
+        <td style="font-family:var(--mono);font-size:11px">${m.expires_at ? new Date(m.expires_at).toLocaleTimeString() : '—'}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  } catch(e) { toast('Failed to load running models', 'error'); }
+}
+
+async function showModel(name) {
+  try {
+    const r = await api('/api/show', {
+      method: 'POST',
+      body: JSON.stringify({ model: name })
+    });
+    const d = await r.json();
+    document.getElementById('modal-title-text').textContent = name;
+    document.getElementById('modal-body').textContent = JSON.stringify(d, null, 2);
+    document.getElementById('modal-overlay').classList.add('open');
+  } catch(e) { toast('Failed to load model info', 'error'); }
+}
+
+async function deleteModel(name) {
+  if (!confirm(`Delete model "${name}"?`)) return;
+  try {
+    await api('/api/delete', { method: 'DELETE', body: JSON.stringify({ model: name }) });
+    toast(`Deleted ${name}`, 'success');
+    loadModels();
+  } catch(e) { toast('Delete failed', 'error'); }
+}
+
+async function pullModel() {
+  const model = document.getElementById('pull-model').value.trim();
+  if (!model) return toast('Enter a model name', 'error');
+  const statusDiv = document.getElementById('pull-status');
+  const logDiv = document.getElementById('pull-log');
+  const bar = document.getElementById('pull-progress');
+  statusDiv.style.display = 'block';
+  logDiv.innerHTML = '';
+  bar.style.width = '0%';
+  try {
+    const r = await api('/api/pull', { method: 'POST', body: JSON.stringify({ model, stream: true }) });
+    if (!r.ok) {
+      let detail = '';
+      try { detail = (await r.json()).error || ''; } catch(_) {}
+      throw new Error(`HTTP ${r.status}${detail ? ' — ' + detail : ''}`);
+    }
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buffer = '';
+    const handleEvent = (ev) => {
+      const span = document.createElement('span');
+      span.className = 'log-line' + (ev.status === 'success' ? ' ok' : '');
+      span.textContent = ev.status + (ev.digest ? ' ' + ev.digest.slice(0,16) + '…' : '') +
+        (ev.completed && ev.total ? ` (${Math.round(ev.completed/ev.total*100)}%)` : '');
+      logDiv.appendChild(span);
+      logDiv.scrollTop = logDiv.scrollHeight;
+      if (ev.total) bar.style.width = Math.round(ev.completed/ev.total*100) + '%';
+      if (ev.status === 'success') { bar.style.width = '100%'; toast('Pull complete: ' + model, 'success'); }
+    };
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += dec.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try { handleEvent(JSON.parse(line)); } catch(_) {}
+      }
+    }
+    if (buffer.trim()) { try { handleEvent(JSON.parse(buffer)); } catch(_) {} }
+  } catch(e) { toast('Pull failed: ' + e.message, 'error'); }
+}
+
+async function copyModel() {
+  const src = document.getElementById('copy-src').value.trim();
+  const dst = document.getElementById('copy-dst').value.trim();
+  if (!src || !dst) return toast('Fill in both fields', 'error');
+  try {
+    await api('/api/copy', { method: 'POST', body: JSON.stringify({ source: src, destination: dst }) });
+    toast(`Copied ${src} → ${dst}`, 'success');
+  } catch(e) { toast('Copy failed', 'error'); }
+}
+
+async function pushModel() {
+  const model = document.getElementById('push-model').value.trim();
+  if (!model) return toast('Enter a model name', 'error');
+  toast('Pushing ' + model + '…', 'info');
+  try {
+    const r = await api('/api/push', { method: 'POST', body: JSON.stringify({ model, stream: false }) });
+    const d = await r.json();
+    toast(d.status || 'Push complete', 'success');
+  } catch(e) { toast('Push failed', 'error'); }
+}
+
+function populateModelSelects() {
+  ['chat-model','gen-model','embed-model'].forEach(id => {
+    const sel = document.getElementById(id);
+    const cur = sel.value;
+    sel.innerHTML = allModels.length
+      ? allModels.map(m => `<option value="${m.name}">${m.name}</option>`).join('')
+      : '<option value="">— no models —</option>';
+    if (cur) sel.value = cur;
+  });
+}
+
+let chatAbort = null;
+let chatSystemSnapshot = '';
+
+function clearChat() {
+  chatAbort?.abort();
+  chatAbort = null;
+  chatHistory = [];
+  chatSystemSnapshot = '';
+  document.getElementById('chat-messages').innerHTML =
+    '<div class="empty" style="margin:auto"><i class="ti ti-messages" aria-hidden="true"></i>Start a conversation</div>';
+}
+
+document.getElementById('chat-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+});
+
+// Auto-resize chat textarea
+document.getElementById('chat-input').addEventListener('input', function(e) {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 200) + 'px';
+});
+
+function stopChat() {
+  chatAbort?.abort();
+}
+
+async function sendChat() {
+  const sendBtn = document.getElementById('chat-send-btn');
+
+  // If already streaming, this acts as stop
+  if (chatAbort) { chatAbort.abort(); return; }
+
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  const model = document.getElementById('chat-model').value;
+  if (!model) return toast('Select a model first', 'error');
+
+  // System prompt: only set at conversation start, ignore later changes mid-chat
+  const system = document.getElementById('chat-system').value.trim();
+  if (chatHistory.length === 0 && system) {
+    chatHistory.push({ role: 'system', content: system });
+    chatSystemSnapshot = system;
+  }
+
+  input.value = '';
+  input.style.height = 'auto';
+  const msgBox = document.getElementById('chat-messages');
+  msgBox.querySelector('.empty')?.remove();
+
+  // User message
+  const userDiv = document.createElement('div');
+  userDiv.className = 'msg user';
+  userDiv.innerHTML = `<div class="msg-avatar"><i class="ti ti-user" aria-hidden="true"></i></div><div class="msg-content">${escHtml(text)}</div>`;
+  msgBox.appendChild(userDiv);
+
+  // Assistant placeholder
+  const aDiv = document.createElement('div');
+  aDiv.className = 'msg assistant';
+  aDiv.innerHTML = `<div class="msg-avatar"><i class="ti ti-robot" aria-hidden="true"></i></div><div class="msg-content"><span class="spinner"></span></div>`;
+  msgBox.appendChild(aDiv);
+  const contentEl = aDiv.querySelector('.msg-content');
+  msgBox.scrollTop = msgBox.scrollHeight;
+
+  // Push user message AFTER UI is set up but before request — we'll roll back on error
+  const userMsg = { role: 'user', content: text };
+  chatHistory.push(userMsg);
+
+  // Switch send button into stop mode
+  sendBtn.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
+  sendBtn.classList.add('btn-danger');
+  sendBtn.classList.remove('btn-primary');
+
+  chatAbort = new AbortController();
+  let full = '';
+
+  try {
+    const r = await api('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ model, messages: chatHistory, stream: true }),
+      signal: chatAbort.signal
+    });
+
+    if (!r.ok) {
+      let detail = '';
+      try { detail = (await r.json()).error || ''; } catch(_) {}
+      throw new Error(`HTTP ${r.status}${detail ? ' — ' + detail : ''}`);
+    }
+
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buffer = '';
+    let firstChunk = true;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += dec.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // keep incomplete trailing line
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const ev = JSON.parse(line);
+          if (ev.message?.content) {
+            if (firstChunk) { contentEl.textContent = ''; firstChunk = false; }
+            full += ev.message.content;
+            // append only the delta — keeps DOM updates O(1) instead of O(n)
+            contentEl.appendChild(document.createTextNode(ev.message.content));
+          }
+        } catch(_) {}
+      }
+      msgBox.scrollTop = msgBox.scrollHeight;
+    }
+
+    // Flush any remaining buffered content
+    if (buffer.trim()) {
+      try {
+        const ev = JSON.parse(buffer);
+        if (ev.message?.content) { full += ev.message.content; contentEl.appendChild(document.createTextNode(ev.message.content)); }
+      } catch(_) {}
+    }
+
+    chatHistory.push({ role: 'assistant', content: full });
+  } catch(e) {
+    // Roll back user message on failure (except for partial-success aborts)
+    if (e.name === 'AbortError') {
+      if (full) {
+        contentEl.appendChild(document.createTextNode('\n\n[stopped]'));
+        chatHistory.push({ role: 'assistant', content: full });
+      } else {
+        // Nothing came back — remove the empty assistant bubble and roll back user msg
+        aDiv.remove();
+        chatHistory.pop();
+      }
+    } else {
+      contentEl.textContent = 'Error: ' + e.message;
+      toast('Chat request failed', 'error');
+      chatHistory.pop(); // remove the user msg that never got answered
+    }
+  } finally {
+    chatAbort = null;
+    sendBtn.innerHTML = '<i class="ti ti-send" aria-hidden="true"></i> Send';
+    sendBtn.classList.add('btn-primary');
+    sendBtn.classList.remove('btn-danger');
+  }
+}
+
+async function doGenerate() {
+  const model = document.getElementById('gen-model').value;
+  const prompt = document.getElementById('gen-prompt').value.trim();
+  if (!model || !prompt) return toast('Select a model and enter a prompt', 'error');
+  const system = document.getElementById('gen-system').value.trim();
+  const format = document.getElementById('gen-format').value;
+  const out = document.getElementById('gen-output');
+  out.textContent = '';
+  try {
+    const body = { model, prompt, stream: true };
+    if (system) body.system = system;
+    if (format) body.format = format;
+    const r = await api('/api/generate', { method: 'POST', body: JSON.stringify(body) });
+    if (!r.ok) {
+      let detail = '';
+      try { detail = (await r.json()).error || ''; } catch(_) {}
+      throw new Error(`HTTP ${r.status}${detail ? ' — ' + detail : ''}`);
+    }
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += dec.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const ev = JSON.parse(line);
+          if (ev.response) { out.appendChild(document.createTextNode(ev.response)); }
+        } catch(_) {}
+      }
+    }
+    if (buffer.trim()) {
+      try {
+        const ev = JSON.parse(buffer);
+        if (ev.response) out.appendChild(document.createTextNode(ev.response));
+      } catch(_) {}
+    }
+  } catch(e) { toast('Generate failed: ' + e.message, 'error'); }
+}
+
+async function doEmbed() {
+  const model = document.getElementById('embed-model').value;
+  const raw = document.getElementById('embed-input').value.trim();
+  if (!model || !raw) return toast('Select a model and enter text', 'error');
+  const input = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  const truncate = document.getElementById('embed-truncate').value === 'true';
+  try {
+    const r = await api('/api/embed', {
+      method: 'POST',
+      body: JSON.stringify({ model, input, truncate })
+    });
+    const d = await r.json();
+    const vecs = d.embeddings || [];
+    const statsDiv = document.getElementById('embed-stats');
+    statsDiv.style.display = 'block';
+    document.getElementById('embed-count').textContent = vecs.length;
+    document.getElementById('embed-dims').textContent = vecs[0]?.length || '—';
+    document.getElementById('embed-tokens').textContent = d.prompt_eval_count || '—';
+    const preview = vecs.map((v, i) =>
+      `[${i}] [${v.slice(0, 8).map(n => n.toFixed(4)).join(', ')}${v.length > 8 ? ', …+' + (v.length-8) + ' more' : ''}]`
+    ).join('\n');
+    document.getElementById('embed-result').textContent = preview;
+    toast(`Generated ${vecs.length} embedding(s) — ${vecs[0]?.length} dims`, 'success');
+  } catch(e) { toast('Embed failed: ' + e.message, 'error'); }
+}
+
+
+let catalogData = [];
+let catSizeFilter = 'all';
+
+async function loadCatalog() {
+  const wrap = document.getElementById('catalog-wrap');
+  wrap.innerHTML = '<div class="empty"><span class="spinner"></span> Loading catalog…</div>';
+  try {
+    const r = await fetch('https://ollama.com/api/tags');
+    const d = await r.json();
+    catalogData = (d.models || []).sort((a,b) => new Date(b.modified_at) - new Date(a.modified_at));
+    renderCatalog();
+    toast(`Loaded ${catalogData.length} models from registry`, 'success');
+  } catch(e) {
+    wrap.innerHTML = '<div class="empty"><i class="ti ti-alert-circle" aria-hidden="true"></i>Failed to load catalog — CORS? Try serving the file via HTTP.</div>';
+    toast('Catalog load failed: ' + e.message, 'error');
+  }
+}
+
+function setCatFilter(el, val) {
+  document.querySelectorAll('.cat-filter').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  catSizeFilter = val;
+  renderCatalog();
+}
+
+function filterCatalog() { renderCatalog(); }
+
+function renderCatalog() {
+  const q = (document.getElementById('catalog-search').value || '').toLowerCase();
+  const installedNames = new Set(allModels.map(m => m.name));
+  let filtered = catalogData.filter(m => {
+    if (q && !m.name.toLowerCase().includes(q)) return false;
+    if (catSizeFilter === 'small' && m.size >= 10e9) return false;
+    if (catSizeFilter === 'medium' && (m.size < 10e9 || m.size > 50e9)) return false;
+    if (catSizeFilter === 'large' && m.size <= 50e9) return false;
+    return true;
+  });
+  document.getElementById('catalog-count').textContent = filtered.length + ' models';
+  if (filtered.length === 0) {
+    document.getElementById('catalog-wrap').innerHTML = '<div class="empty"><i class="ti ti-search" aria-hidden="true"></i>No models match</div>';
+    return;
+  }
+  document.getElementById('catalog-wrap').innerHTML = `<div class="catalog-grid">${filtered.map(m => {
+    const inst = installedNames.has(m.name);
+    const age = fmtAge(m.modified_at);
+    const baseName = m.name.split(':')[0];
+    return `<div class="catalog-card${inst?' installed':''}">
+      <div class="catalog-name">
+        <span>${escHtml(m.name)}</span>
+        ${inst ? '<span class="badge running" style="font-size:10px">installed</span>' : ''}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <span class="badge">${fmtSize(m.size)}</span>
+        <span class="badge" style="color:var(--text3)">${age}</span>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn btn-sm btn-primary" style="flex:1" onclick="quickPull('${escHtml(m.name)}')">
+          <i class="ti ti-download" aria-hidden="true"></i> Pull
+        </button>
+        <a class="btn btn-sm" href="https://ollama.com/library/${escHtml(baseName)}" target="_blank" rel="noopener">
+          <i class="ti ti-external-link" aria-hidden="true"></i>
+        </a>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function quickPull(name) {
+  document.getElementById('pull-model').value = name;
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelector('[data-page="pull"]').classList.add('active');
+  document.getElementById('page-pull').classList.add('active');
+  pullModel();
+}
+
+function fmtAge(iso) {
+  if (!iso) return '';
+  const diff = Date.now() - new Date(iso).getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days < 1) return 'today';
+  if (days < 30) return days + 'd ago';
+  const months = Math.floor(days/30);
+  if (months < 12) return months + 'mo ago';
+  return Math.floor(months/12) + 'y ago';
+}
+
+
+function closeModal(e) {
+  if (e.target.id === 'modal-overlay') document.getElementById('modal-overlay').classList.remove('open');
+}
+
+function fmtSize(b) {
+  if (!b) return '—';
+  if (b > 1e9) return (b/1e9).toFixed(1) + ' GB';
+  if (b > 1e6) return (b/1e6).toFixed(0) + ' MB';
+  return (b/1e3).toFixed(0) + ' KB';
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+connect();
+</script>
+</body>
+</html>
