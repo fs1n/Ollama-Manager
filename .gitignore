@@ -135,4 +135,5 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
-index.html.bak
+.claude/
+CLAUDE.md
