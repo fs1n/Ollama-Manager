@@ -1,6 +1,7 @@
 services:
   ollama-manager:
-    build: .
+    image: ghcr.io/fs1n/ollama-manager:latest
+    # build: .
     ports:
       - "3000:3000"  # UI
       - "8080:8080"  # CORS Proxy
