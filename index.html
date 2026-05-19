@@ -1365,7 +1365,8 @@ async function loadCatalog() {
   const wrap = document.getElementById('catalog-wrap');
   wrap.innerHTML = '<div class="empty"><span class="spinner"></span> Loading catalog…</div>';
   try {
-    const r = await fetch('https://ollama.com/api/tags');
+    const url = encodeURIComponent('https://ollama.com/api/tags');
+    const r = await fetch(`http://localhost:8080/api/proxy?url=${url}`);
     const d = await r.json();
     catalogData = (d.models || []).sort((a,b) => new Date(b.modified_at) - new Date(a.modified_at));
     renderCatalog();

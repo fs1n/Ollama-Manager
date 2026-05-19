@@ -1,0 +1,7 @@
+.git
+.gitignore
+.claude
+LICENSE
+*.bak
+.DS_Store
+node_modules

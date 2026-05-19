@@ -1,0 +1,8 @@
+services:
+  ollama-manager:
+    build: .
+    ports:
+      - "3000:3000"  # UI
+      - "8080:8080"  # CORS Proxy
+    environment:
+      - PORT=8080
