@@ -1,18 +1,20 @@
-FROM node:26-alpine
+FROM oven/bun:1-alpine
+
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /app
 
-# Copy application files
-COPY proxy.js .
-COPY index.html .
+COPY package.json ./
+COPY src/ ./src/
+COPY public/ ./public/
 
-# Install http-server to serve static files
-RUN npm install --global http-server
+RUN chown -R appuser:appgroup /app
 
-# Copy entrypoint script
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+USER appuser
 
-EXPOSE 3000 8080
+EXPOSE 3000
 
-CMD ["/app/entrypoint.sh"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD bun -e "process.exit((await fetch('http://localhost:3000/health')).ok ? 0 : 1)"
+
+CMD ["bun", "run", "src/index.ts"]

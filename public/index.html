@@ -20,7 +20,7 @@
   --border2: rgba(255,255,255,0.14);
   --text: #e8e6e0;
   --text2: #8a8780;
-  --text3: #5a5855;
+  --text3: #7d7b76;
   --accent: #c8f060;
   --accent2: #a8d040;
   --danger: #ff5555;
@@ -68,43 +68,6 @@ header {
 .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-.header-url {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 6px 12px;
-}
-
-.header-url input {
-  background: transparent;
-  border: none;
-  outline: none;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 12px;
-  width: 260px;
-}
-
-.header-url input::placeholder { color: var(--text3); }
-
-.btn-connect {
-  background: var(--accent);
-  color: #0f0f0f;
-  border: none;
-  border-radius: 6px;
-  padding: 5px 12px;
-  font-family: var(--sans);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.btn-connect:hover { background: var(--accent2); }
-
 .status-badge {
   display: flex;
   align-items: center;
@@ -141,7 +104,7 @@ nav {
   font-weight: 500;
   color: var(--text2);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
   border-left: 2px solid transparent;
   user-select: none;
 }
@@ -226,7 +189,7 @@ main {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background-color 0.15s, border-color 0.15s, transform 0.15s, opacity 0.15s;
   border: 1px solid var(--border2);
   background: var(--bg3);
   color: var(--text);
@@ -570,6 +533,99 @@ tr:hover td { background: var(--bg3); }
   max-height: 400px;
   overflow-y: auto;
 }
+
+/* ============================================================
+   Tablet: max-width 1024px
+   ============================================================ */
+@media (max-width: 1024px) {
+  main { padding: 20px 24px; }
+  .form-row.cols3 { grid-template-columns: 1fr 1fr; }
+  .model-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+  .catalog-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+  .info-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .page-title { font-size: 18px; }
+  .page-sub { font-size: 12px; }
+  #toast-container { right: 16px; bottom: 16px; }
+  .toast { min-width: 180px; font-size: 12px; }
+  .modal { width: 90vw; }
+}
+
+/* ============================================================
+   Mobile: max-width 640px
+   ============================================================ */
+@media (max-width: 640px) {
+  body {
+    grid-template-columns: 1fr;
+    grid-template-rows: 50px auto 1fr;
+    grid-template-areas: "header" "nav" "main";
+  }
+  header { padding: 0 12px; gap: 10px; }
+  .logo { font-size: 14px; gap: 6px; }
+  .status-badge { font-size: 10px; padding: 3px 8px; gap: 4px; }
+  .status-dot { width: 5px; height: 5px; }
+  nav {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 6px 8px;
+    gap: 2px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  nav::-webkit-scrollbar { display: none; }
+  .nav-section { display: none; }
+  .nav-item {
+    flex-shrink: 0;
+    padding: 7px 12px;
+    font-size: 12px;
+    border-left: none;
+    border-bottom: 2px solid transparent;
+    border-radius: var(--radius);
+    gap: 6px;
+  }
+  .nav-item i { font-size: 14px; }
+  .nav-item.active {
+    border-left-color: transparent;
+    border-bottom-color: var(--accent);
+    background: rgba(200,240,96,0.06);
+  }
+  main { padding: 16px 12px; }
+  .page-header { flex-direction: column; align-items: flex-start; gap: 10px; margin-bottom: 16px; }
+  .page-title { font-size: 17px; }
+  .page-sub { font-size: 12px; margin-top: 0; }
+  .page-header > .btn, .page-header > div:last-child { width: 100%; }
+  .page-header > div:last-child .btn { width: 100%; }
+  .form-row.cols2, .form-row.cols3 { grid-template-columns: 1fr; }
+  .card { padding: 14px; margin-bottom: 12px; }
+  .card-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .model-grid { grid-template-columns: 1fr; }
+  .catalog-grid { grid-template-columns: 1fr; }
+  .info-grid { grid-template-columns: 1fr 1fr; }
+  .chat-messages { max-height: 280px; min-height: 180px; padding: 12px; }
+  .chat-input-row { flex-direction: column; }
+  .chat-input-row textarea { min-height: 50px; }
+  .msg-content { max-width: 95%; }
+  th, td { padding: 8px; font-size: 11px; }
+  td:first-child { font-size: 11px; }
+  #toast-container { left: 12px; right: 12px; bottom: 12px; gap: 6px; }
+  .toast { min-width: 0; font-size: 12px; padding: 8px 12px; }
+  .modal { width: 95vw; max-width: none; padding: 16px; max-height: 85vh; }
+  .modal-title { font-size: 14px; }
+  .btn { padding: 6px 12px; font-size: 12px; }
+  .btn i { font-size: 13px; }
+  #catalog-search { width: 100% !important; max-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 </style>
 </head>
 <body>
@@ -579,11 +635,6 @@ tr:hover td { background: var(--bg3); }
     <div class="logo-dot"></div>
     ollama manager
   </div>
-  <div class="header-url">
-    <i class="ti ti-server" style="font-size:14px;color:var(--text3)" aria-hidden="true"></i>
-    <input type="text" id="ollama-url" value="http://localhost:11434" placeholder="http://ollama:11434">
-    <button class="btn-connect" onclick="connect()">Connect</button>
-  </div>
   <div class="status-badge">
     <div class="status-dot" id="status-dot"></div>
     <span id="status-text">disconnected</span>
@@ -592,36 +643,36 @@ tr:hover td { background: var(--bg3); }
 
 <nav>
   <div class="nav-section">Overview</div>
-  <div class="nav-item active" data-page="dashboard" onclick="nav(this)">
+  <div class="nav-item active" data-page="dashboard" tabindex="0" role="button">
     <i class="ti ti-layout-dashboard" aria-hidden="true"></i> Dashboard
   </div>
 
   <div class="nav-section">Models</div>
-  <div class="nav-item" data-page="models" onclick="nav(this)">
+  <div class="nav-item" data-page="models" tabindex="0" role="button">
     <i class="ti ti-box" aria-hidden="true"></i> Local models
   </div>
-  <div class="nav-item" data-page="running" onclick="nav(this)">
+  <div class="nav-item" data-page="running" tabindex="0" role="button">
     <i class="ti ti-player-play" aria-hidden="true"></i> Running
   </div>
-  <div class="nav-item" data-page="pull" onclick="nav(this)">
+  <div class="nav-item" data-page="pull" tabindex="0" role="button">
     <i class="ti ti-download" aria-hidden="true"></i> Pull model
   </div>
-  <div class="nav-item" data-page="copy" onclick="nav(this)">
+  <div class="nav-item" data-page="copy" tabindex="0" role="button">
     <i class="ti ti-copy" aria-hidden="true"></i> Copy / push
   </div>
 
-  <div class="nav-item" data-page="catalog" onclick="nav(this)">
+  <div class="nav-item" data-page="catalog" tabindex="0" role="button">
     <i class="ti ti-world" aria-hidden="true"></i> Registry catalog
   </div>
 
   <div class="nav-section">Test</div>
-  <div class="nav-item" data-page="chat" onclick="nav(this)">
+  <div class="nav-item" data-page="chat" tabindex="0" role="button">
     <i class="ti ti-messages" aria-hidden="true"></i> Chat
   </div>
-  <div class="nav-item" data-page="generate" onclick="nav(this)">
+  <div class="nav-item" data-page="generate" tabindex="0" role="button">
     <i class="ti ti-wand" aria-hidden="true"></i> Generate
   </div>
-  <div class="nav-item" data-page="embeddings" onclick="nav(this)">
+  <div class="nav-item" data-page="embeddings" tabindex="0" role="button">
     <i class="ti ti-vector" aria-hidden="true"></i> Embeddings
   </div>
 </nav>
@@ -649,10 +700,6 @@ tr:hover td { background: var(--bg3); }
     <div class="info-item">
       <div class="info-label">Running now</div>
       <div class="info-value" id="dash-running-count">—</div>
-    </div>
-    <div class="info-item">
-      <div class="info-label">Endpoint</div>
-      <div class="info-value" id="dash-endpoint" style="font-size:11px">—</div>
     </div>
   </div>
   <div class="card">
@@ -702,7 +749,7 @@ tr:hover td { background: var(--bg3); }
         <input type="text" id="pull-model" placeholder="llama3.2, mistral, gemma2:9b …">
       </div>
       <div style="display:flex;align-items:flex-end">
-        <button class="btn btn-primary" onclick="pullModel()" style="width:100%">
+        <button class="btn btn-primary" id="pull-btn" onclick="pullModel()" style="width:100%">
           <i class="ti ti-download" aria-hidden="true"></i> Pull
         </button>
       </div>
@@ -814,7 +861,7 @@ tr:hover td { background: var(--bg3); }
       <textarea id="gen-prompt" rows="4" placeholder="Enter your prompt…"></textarea>
     </div>
     <div style="display:flex;gap:10px;margin-bottom:16px">
-      <button class="btn btn-primary" onclick="doGenerate()"><i class="ti ti-wand" aria-hidden="true"></i> Generate</button>
+      <button class="btn btn-primary" id="gen-btn" onclick="doGenerate()"><i class="ti ti-wand" aria-hidden="true"></i> Generate</button>
       <button class="btn btn-sm" onclick="document.getElementById('gen-output').textContent=''">Clear</button>
     </div>
     <label>Response</label>
@@ -878,15 +925,15 @@ tr:hover td { background: var(--bg3); }
       <div class="page-sub">All models available on ollama.com — click to pull</div>
     </div>
     <div style="display:flex;gap:10px;align-items:center">
-      <input type="text" id="catalog-search" placeholder="Search models…" style="width:220px" oninput="filterCatalog()">
+      <input type="text" id="catalog-search" placeholder="Search models…" aria-label="Search models" style="width:220px" oninput="filterCatalog()">
       <button class="btn" onclick="loadCatalog()"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
     </div>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px" id="catalog-size-filters">
-    <button class="btn btn-sm cat-filter active" data-filter="all" onclick="setCatFilter(this,'all')">All</button>
-    <button class="btn btn-sm cat-filter" data-filter="small" onclick="setCatFilter(this,'small')">Small (&lt;10 GB)</button>
-    <button class="btn btn-sm cat-filter" data-filter="medium" onclick="setCatFilter(this,'medium')">Medium (10–50 GB)</button>
-    <button class="btn btn-sm cat-filter" data-filter="large" onclick="setCatFilter(this,'large')">Large (&gt;50 GB)</button>
+    <button class="btn btn-sm cat-filter active" data-filter="all">All</button>
+    <button class="btn btn-sm cat-filter" data-filter="small">Small (&lt;10 GB)</button>
+    <button class="btn btn-sm cat-filter" data-filter="medium">Medium (10–50 GB)</button>
+    <button class="btn btn-sm cat-filter" data-filter="large">Large (&gt;50 GB)</button>
     <span style="margin-left:auto;font-size:12px;color:var(--text3);align-self:center" id="catalog-count"></span>
   </div>
   <div id="catalog-wrap"><div class="empty"><i class="ti ti-world" aria-hidden="true"></i>Click refresh to load catalog</div></div>
@@ -895,7 +942,7 @@ tr:hover td { background: var(--bg3); }
 </main>
 
 <!-- Model detail modal -->
-<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+<div class="modal-overlay" id="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title-text" onclick="closeModal(event)">
   <div class="modal">
     <div class="modal-title">
       <span id="modal-title-text">Model details</span>
@@ -907,36 +954,80 @@ tr:hover td { background: var(--bg3); }
   </div>
 </div>
 
-<div id="toast-container"></div>
+<div id="toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
 
 <script>
-let baseUrl = 'http://localhost:11434';
 let chatHistory = [];
-let allModels = [];
+let modelCache = [];
+let pullAbort = null;
+let genAbort = null;
+
+async function fetchModels() {
+  const r = await api('/api/tags');
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const d = await r.json();
+  modelCache = d.models || [];
+  return modelCache;
+}
 
 function api(path, opts = {}) {
-  return fetch(baseUrl + path, {
-    headers: { 'Content-Type': 'application/json', ...opts.headers },
-    ...opts
+  const { headers: customHeaders, ...rest } = opts;
+  return fetch(path, {
+    headers: { 'Content-Type': 'application/json', ...customHeaders },
+    ...rest
   });
 }
 
+async function* readNdjsonLines(response) {
+  const reader = response.body.getReader();
+  const dec = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += dec.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try { yield JSON.parse(line); } catch(_) {}
+    }
+  }
+  if (buffer.trim()) {
+    try { yield JSON.parse(buffer); } catch(_) {}
+  }
+}
+
+async function httpErrorDetail(r) {
+  let detail = '';
+  try { detail = (await r.json()).error || ''; } catch(_) {}
+  return `HTTP ${r.status}${detail ? ' — ' + detail : ''}`;
+}
+
+function activatePage(name) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === name));
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + name));
+}
+
+const pageLoaders = {
+  models: loadModels,
+  running: loadRunning,
+  chat: populateModelSelects,
+  generate: populateModelSelects,
+  embeddings: populateModelSelects,
+  catalog: () => { if (!catalogData.length) loadCatalog(); }
+};
+
 function nav(el) {
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  el.classList.add('active');
-  document.getElementById('page-' + el.dataset.page).classList.add('active');
-  if (el.dataset.page === 'models') loadModels();
-  if (el.dataset.page === 'running') loadRunning();
-  if (el.dataset.page === 'chat' || el.dataset.page === 'generate' || el.dataset.page === 'embeddings') populateModelSelects();
-  if (el.dataset.page === 'catalog' && catalogData.length === 0) loadCatalog();
+  activatePage(el.dataset.page);
+  pageLoaders[el.dataset.page]?.();
 }
 
 function toast(msg, type = 'info') {
   const el = document.createElement('div');
   el.className = `toast ${type}`;
   const icons = { success: 'ti-check', error: 'ti-alert-circle', info: 'ti-info-circle' };
-  el.innerHTML = `<i class="ti ${icons[type]}" aria-hidden="true"></i> ${msg}`;
+  el.innerHTML = `<i class="ti ${icons[type]}" aria-hidden="true"></i> ${escHtml(msg)}`;
   document.getElementById('toast-container').appendChild(el);
   setTimeout(() => el.remove(), 3500);
 }
@@ -949,8 +1040,6 @@ function setStatus(ok, version) {
 }
 
 async function connect() {
-  baseUrl = document.getElementById('ollama-url').value.replace(/\/$/, '');
-  document.getElementById('dash-endpoint').textContent = baseUrl;
   try {
     const r = await api('/api/version');
     const d = await r.json();
@@ -960,7 +1049,7 @@ async function connect() {
     await loadDashboard();
   } catch(e) {
     setStatus(false, '');
-    toast('Cannot reach ' + baseUrl, 'error');
+    toast('Ollama unreachable', 'error');
   }
 }
 
@@ -969,9 +1058,9 @@ async function loadDashboard() {
     const [modR, runR] = await Promise.all([api('/api/tags'), api('/api/ps')]);
     const modD = await modR.json();
     const runD = await runR.json();
-    allModels = modD.models || [];
+    modelCache = modD.models || [];
     const running = runD.models || [];
-    document.getElementById('dash-model-count').textContent = allModels.length;
+    document.getElementById('dash-model-count').textContent = modelCache.length;
     document.getElementById('dash-running-count').textContent = running.length;
     const runList = document.getElementById('dash-running-list');
     if (running.length === 0) {
@@ -979,39 +1068,37 @@ async function loadDashboard() {
     } else {
       runList.innerHTML = running.map(m => `
         <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
-          <span style="font-family:var(--mono);font-size:12px;color:var(--accent)">${m.name}</span>
+          <span style="font-family:var(--mono);font-size:12px;color:var(--accent)">${escHtml(m.name)}</span>
           <div style="display:flex;gap:8px;align-items:center">
             <span class="badge running">running</span>
             <span class="badge">${fmtSize(m.size_vram || m.size)}</span>
           </div>
         </div>`).join('');
     }
-  } catch(e) {}
+  } catch(e) { toast('Dashboard load failed', 'error'); }
 }
 
 async function loadModels() {
   try {
-    const r = await api('/api/tags');
-    const d = await r.json();
-    allModels = d.models || [];
+    const models = await fetchModels();
     const wrap = document.getElementById('model-grid-wrap');
-    if (allModels.length === 0) {
+    if (models.length === 0) {
       wrap.innerHTML = '<div class="empty"><i class="ti ti-box" aria-hidden="true"></i>No models found. Pull one first.</div>';
       return;
     }
-    wrap.innerHTML = `<div class="model-grid">${allModels.map(m => `
+    wrap.innerHTML = `<div class="model-grid">${models.map(m => `
       <div class="model-card">
         <div class="model-name">
-          <span>${m.name}</span>
+          <span>${escHtml(m.name)}</span>
         </div>
         <div class="model-meta">
           <span class="badge">${fmtSize(m.size)}</span>
-          <span class="badge">${m.details?.parameter_size || ''}</span>
-          <span class="badge">${m.details?.quantization_level || ''}</span>
+          <span class="badge">${escHtml(m.details?.parameter_size || '')}</span>
+          <span class="badge">${escHtml(m.details?.quantization_level || '')}</span>
         </div>
         <div class="model-actions">
-          <button class="btn btn-sm" onclick='showModel("${m.name}")'><i class="ti ti-info-circle" aria-hidden="true"></i> Info</button>
-          <button class="btn btn-sm btn-danger" onclick='deleteModel("${m.name}")'><i class="ti ti-trash" aria-hidden="true"></i> Delete</button>
+          <button class="btn btn-sm" data-action="info" data-model="${escAttr(m.name)}"><i class="ti ti-info-circle" aria-hidden="true"></i> Info</button>
+          <button class="btn btn-sm btn-danger" data-action="delete" data-model="${escAttr(m.name)}"><i class="ti ti-trash" aria-hidden="true"></i> Delete</button>
         </div>
       </div>`).join('')}</div>`;
   } catch(e) { toast('Failed to load models', 'error'); }
@@ -1030,7 +1117,7 @@ async function loadRunning() {
     wrap.innerHTML = `<div class="table-wrap"><table>
       <thead><tr><th>Model</th><th>Size</th><th>VRAM</th><th>Expires</th></tr></thead>
       <tbody>${running.map(m => `<tr>
-        <td>${m.name}</td>
+        <td>${escHtml(m.name)}</td>
         <td>${fmtSize(m.size)}</td>
         <td>${fmtSize(m.size_vram)}</td>
         <td style="font-family:var(--mono);font-size:11px">${m.expires_at ? new Date(m.expires_at).toLocaleTimeString() : '—'}</td>
@@ -1048,20 +1135,29 @@ async function showModel(name) {
     const d = await r.json();
     document.getElementById('modal-title-text').textContent = name;
     document.getElementById('modal-body').textContent = JSON.stringify(d, null, 2);
-    document.getElementById('modal-overlay').classList.add('open');
+    const overlay = document.getElementById('modal-overlay');
+    overlay.classList.add('open');
+    overlay.querySelector('.btn')?.focus();
   } catch(e) { toast('Failed to load model info', 'error'); }
 }
 
 async function deleteModel(name) {
   if (!confirm(`Delete model "${name}"?`)) return;
+  document.querySelectorAll('[data-action="delete"]').forEach(b => b.disabled = true);
   try {
-    await api('/api/delete', { method: 'DELETE', body: JSON.stringify({ model: name }) });
+    const r = await api('/api/delete', { method: 'DELETE', body: JSON.stringify({ model: name }) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
     toast(`Deleted ${name}`, 'success');
     loadModels();
   } catch(e) { toast('Delete failed', 'error'); }
 }
 
 async function pullModel() {
+  const pullBtn = document.getElementById('pull-btn');
+
+  // If already pulling, this acts as stop
+  if (pullAbort) { pullAbort.abort(); return; }
+
   const model = document.getElementById('pull-model').value.trim();
   if (!model) return toast('Enter a model name', 'error');
   const statusDiv = document.getElementById('pull-status');
@@ -1070,17 +1166,16 @@ async function pullModel() {
   statusDiv.style.display = 'block';
   logDiv.innerHTML = '';
   bar.style.width = '0%';
+
+  pullAbort = new AbortController();
+  pullBtn.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
+  pullBtn.classList.add('btn-danger');
+  pullBtn.classList.remove('btn-primary');
+
   try {
-    const r = await api('/api/pull', { method: 'POST', body: JSON.stringify({ model, stream: true }) });
-    if (!r.ok) {
-      let detail = '';
-      try { detail = (await r.json()).error || ''; } catch(_) {}
-      throw new Error(`HTTP ${r.status}${detail ? ' — ' + detail : ''}`);
-    }
-    const reader = r.body.getReader();
-    const dec = new TextDecoder();
-    let buffer = '';
-    const handleEvent = (ev) => {
+    const r = await api('/api/pull', { method: 'POST', body: JSON.stringify({ model, stream: true }), signal: pullAbort.signal });
+    if (!r.ok) throw new Error(await httpErrorDetail(r));
+    for await (const ev of readNdjsonLines(r)) {
       const span = document.createElement('span');
       span.className = 'log-line' + (ev.status === 'success' ? ' ok' : '');
       span.textContent = ev.status + (ev.digest ? ' ' + ev.digest.slice(0,16) + '…' : '') +
@@ -1089,30 +1184,31 @@ async function pullModel() {
       logDiv.scrollTop = logDiv.scrollHeight;
       if (ev.total) bar.style.width = Math.round(ev.completed/ev.total*100) + '%';
       if (ev.status === 'success') { bar.style.width = '100%'; toast('Pull complete: ' + model, 'success'); }
-    };
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += dec.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try { handleEvent(JSON.parse(line)); } catch(_) {}
-      }
     }
-    if (buffer.trim()) { try { handleEvent(JSON.parse(buffer)); } catch(_) {} }
-  } catch(e) { toast('Pull failed: ' + e.message, 'error'); }
+  } catch(e) {
+    if (e.name !== 'AbortError') toast('Pull failed: ' + e.message, 'error');
+  } finally {
+    pullAbort = null;
+    pullBtn.innerHTML = '<i class="ti ti-download" aria-hidden="true"></i> Pull';
+    pullBtn.classList.remove('btn-danger');
+    pullBtn.classList.add('btn-primary');
+  }
 }
 
+let copying = false;
+
 async function copyModel() {
+  if (copying) return;
   const src = document.getElementById('copy-src').value.trim();
   const dst = document.getElementById('copy-dst').value.trim();
   if (!src || !dst) return toast('Fill in both fields', 'error');
+  copying = true;
   try {
-    await api('/api/copy', { method: 'POST', body: JSON.stringify({ source: src, destination: dst }) });
+    const r = await api('/api/copy', { method: 'POST', body: JSON.stringify({ source: src, destination: dst }) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
     toast(`Copied ${src} → ${dst}`, 'success');
   } catch(e) { toast('Copy failed', 'error'); }
+  finally { copying = false; }
 }
 
 async function pushModel() {
@@ -1122,16 +1218,20 @@ async function pushModel() {
   try {
     const r = await api('/api/push', { method: 'POST', body: JSON.stringify({ model, stream: false }) });
     const d = await r.json();
-    toast(d.status || 'Push complete', 'success');
+    toast(d.status || 'Push complete', r.ok ? 'success' : 'error');
   } catch(e) { toast('Push failed', 'error'); }
 }
 
+let lastModelCacheLen = -1;
+
 function populateModelSelects() {
+  if (modelCache.length === lastModelCacheLen) return;
+  lastModelCacheLen = modelCache.length;
   ['chat-model','gen-model','embed-model'].forEach(id => {
     const sel = document.getElementById(id);
     const cur = sel.value;
-    sel.innerHTML = allModels.length
-      ? allModels.map(m => `<option value="${m.name}">${m.name}</option>`).join('')
+    sel.innerHTML = modelCache.length
+      ? modelCache.map(m => `<option value="${escHtml(m.name)}">${escHtml(m.name)}</option>`).join('')
       : '<option value="">— no models —</option>';
     if (cur) sel.value = cur;
   });
@@ -1220,46 +1320,17 @@ async function sendChat() {
       signal: chatAbort.signal
     });
 
-    if (!r.ok) {
-      let detail = '';
-      try { detail = (await r.json()).error || ''; } catch(_) {}
-      throw new Error(`HTTP ${r.status}${detail ? ' — ' + detail : ''}`);
-    }
+    if (!r.ok) throw new Error(await httpErrorDetail(r));
 
-    const reader = r.body.getReader();
-    const dec = new TextDecoder();
-    let buffer = '';
     let firstChunk = true;
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += dec.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || ''; // keep incomplete trailing line
-
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const ev = JSON.parse(line);
-          if (ev.message?.content) {
-            if (firstChunk) { contentEl.textContent = ''; firstChunk = false; }
-            full += ev.message.content;
-            // append only the delta — keeps DOM updates O(1) instead of O(n)
-            contentEl.appendChild(document.createTextNode(ev.message.content));
-          }
-        } catch(_) {}
+    for await (const ev of readNdjsonLines(r)) {
+      if (ev.message?.content) {
+        if (firstChunk) { contentEl.textContent = ''; firstChunk = false; }
+        full += ev.message.content;
+        contentEl.appendChild(document.createTextNode(ev.message.content));
       }
       msgBox.scrollTop = msgBox.scrollHeight;
-    }
-
-    // Flush any remaining buffered content
-    if (buffer.trim()) {
-      try {
-        const ev = JSON.parse(buffer);
-        if (ev.message?.content) { full += ev.message.content; contentEl.appendChild(document.createTextNode(ev.message.content)); }
-      } catch(_) {}
     }
 
     chatHistory.push({ role: 'assistant', content: full });
@@ -1288,6 +1359,11 @@ async function sendChat() {
 }
 
 async function doGenerate() {
+  const genBtn = document.getElementById('gen-btn');
+
+  // If already generating, this acts as stop
+  if (genAbort) { genAbort.abort(); return; }
+
   const model = document.getElementById('gen-model').value;
   const prompt = document.getElementById('gen-prompt').value.trim();
   if (!model || !prompt) return toast('Select a model and enter a prompt', 'error');
@@ -1295,40 +1371,29 @@ async function doGenerate() {
   const format = document.getElementById('gen-format').value;
   const out = document.getElementById('gen-output');
   out.textContent = '';
+
+  genAbort = new AbortController();
+  genBtn.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
+  genBtn.classList.add('btn-danger');
+  genBtn.classList.remove('btn-primary');
+
   try {
     const body = { model, prompt, stream: true };
     if (system) body.system = system;
     if (format) body.format = format;
-    const r = await api('/api/generate', { method: 'POST', body: JSON.stringify(body) });
-    if (!r.ok) {
-      let detail = '';
-      try { detail = (await r.json()).error || ''; } catch(_) {}
-      throw new Error(`HTTP ${r.status}${detail ? ' — ' + detail : ''}`);
+    const r = await api('/api/generate', { method: 'POST', body: JSON.stringify(body), signal: genAbort.signal });
+    if (!r.ok) throw new Error(await httpErrorDetail(r));
+    for await (const ev of readNdjsonLines(r)) {
+      if (ev.response) out.appendChild(document.createTextNode(ev.response));
     }
-    const reader = r.body.getReader();
-    const dec = new TextDecoder();
-    let buffer = '';
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += dec.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const ev = JSON.parse(line);
-          if (ev.response) { out.appendChild(document.createTextNode(ev.response)); }
-        } catch(_) {}
-      }
-    }
-    if (buffer.trim()) {
-      try {
-        const ev = JSON.parse(buffer);
-        if (ev.response) out.appendChild(document.createTextNode(ev.response));
-      } catch(_) {}
-    }
-  } catch(e) { toast('Generate failed: ' + e.message, 'error'); }
+  } catch(e) {
+    if (e.name !== 'AbortError') toast('Generate failed: ' + e.message, 'error');
+  } finally {
+    genAbort = null;
+    genBtn.innerHTML = '<i class="ti ti-wand" aria-hidden="true"></i> Generate';
+    genBtn.classList.remove('btn-danger');
+    genBtn.classList.add('btn-primary');
+  }
 }
 
 async function doEmbed() {
@@ -1342,6 +1407,7 @@ async function doEmbed() {
       method: 'POST',
       body: JSON.stringify({ model, input, truncate })
     });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
     const vecs = d.embeddings || [];
     const statsDiv = document.getElementById('embed-stats');
@@ -1365,8 +1431,7 @@ async function loadCatalog() {
   const wrap = document.getElementById('catalog-wrap');
   wrap.innerHTML = '<div class="empty"><span class="spinner"></span> Loading catalog…</div>';
   try {
-    const url = encodeURIComponent('https://ollama.com/api/tags');
-    const r = await fetch(`http://localhost:8080/api/proxy?url=${url}`);
+    const r = await api('/api/proxy/catalog');
     const d = await r.json();
     catalogData = (d.models || []).sort((a,b) => new Date(b.modified_at) - new Date(a.modified_at));
     renderCatalog();
@@ -1377,9 +1442,8 @@ async function loadCatalog() {
   }
 }
 
-function setCatFilter(el, val) {
-  document.querySelectorAll('.cat-filter').forEach(b => b.classList.remove('active'));
-  el.classList.add('active');
+function setCatFilter(val) {
+  document.querySelectorAll('.cat-filter').forEach(b => b.classList.toggle('active', b.dataset.filter === val));
   catSizeFilter = val;
   renderCatalog();
 }
@@ -1388,7 +1452,7 @@ function filterCatalog() { renderCatalog(); }
 
 function renderCatalog() {
   const q = (document.getElementById('catalog-search').value || '').toLowerCase();
-  const installedNames = new Set(allModels.map(m => m.name));
+  const installedNames = new Set(modelCache.map(m => m.name));
   let filtered = catalogData.filter(m => {
     if (q && !m.name.toLowerCase().includes(q)) return false;
     if (catSizeFilter === 'small' && m.size >= 10e9) return false;
@@ -1415,10 +1479,10 @@ function renderCatalog() {
         <span class="badge" style="color:var(--text3)">${age}</span>
       </div>
       <div style="display:flex;gap:8px;margin-top:4px">
-        <button class="btn btn-sm btn-primary" style="flex:1" onclick="quickPull('${escHtml(m.name)}')">
+        <button class="btn btn-sm btn-primary" style="flex:1" data-action="quick-pull" data-model="${escAttr(m.name)}">
           <i class="ti ti-download" aria-hidden="true"></i> Pull
         </button>
-        <a class="btn btn-sm" href="https://ollama.com/library/${escHtml(baseName)}" target="_blank" rel="noopener">
+        <a class="btn btn-sm" href="https://ollama.com/library/${encodeURIComponent(baseName)}" target="_blank" rel="noopener">
           <i class="ti ti-external-link" aria-hidden="true"></i>
         </a>
       </div>
@@ -1428,10 +1492,7 @@ function renderCatalog() {
 
 function quickPull(name) {
   document.getElementById('pull-model').value = name;
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelector('[data-page="pull"]').classList.add('active');
-  document.getElementById('page-pull').classList.add('active');
+  activatePage('pull');
   pullModel();
 }
 
@@ -1451,6 +1512,10 @@ function closeModal(e) {
   if (e.target.id === 'modal-overlay') document.getElementById('modal-overlay').classList.remove('open');
 }
 
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('modal-overlay').classList.remove('open');
+});
+
 function fmtSize(b) {
   if (!b) return '—';
   if (b > 1e9) return (b/1e9).toFixed(1) + ' GB';
@@ -1459,8 +1524,47 @@ function fmtSize(b) {
 }
 
 function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+
+function escAttr(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+          .replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+}
+
+// Event delegation: sidebar navigation
+document.querySelector('nav').addEventListener('click', e => {
+  const item = e.target.closest('[data-page]');
+  if (item) nav(item);
+});
+document.querySelector('nav').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    const item = e.target.closest('[data-page]');
+    if (item) { e.preventDefault(); nav(item); }
+  }
+});
+
+// Event delegation: model grid (show/info + delete)
+document.getElementById('model-grid-wrap').addEventListener('click', e => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const name = btn.dataset.model;
+  if (btn.dataset.action === 'info') showModel(name);
+  if (btn.dataset.action === 'delete') deleteModel(name);
+});
+
+// Event delegation: catalog size filters
+document.getElementById('catalog-size-filters').addEventListener('click', e => {
+  const btn = e.target.closest('[data-filter]');
+  if (btn) setCatFilter(btn.dataset.filter);
+});
+
+// Event delegation: catalog grid (quickPull)
+document.getElementById('catalog-wrap').addEventListener('click', e => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  if (btn.dataset.action === 'quick-pull') quickPull(btn.dataset.model);
+});
 
 connect();
 </script>

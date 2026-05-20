@@ -5,3 +5,4 @@ LICENSE
 *.bak
 .DS_Store
 node_modules
+bun.lockb

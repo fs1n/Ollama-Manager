@@ -1,0 +1,13 @@
+{
+  "name": "ollama-manager",
+  "version": "0.2.0",
+  "description": "Web UI for managing Ollama instances — Bun backend + vanilla frontend",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
