@@ -9,7 +9,7 @@ Features:
 - Chat, generate, and embeddings testing
 - Optional master-key authentication
 
-<img width="1552" height="982" alt="image" src="https://github.com/user-attachments/assets/3eaa76c3-f75a-4fc1-95ab-4804b022a748" />
+<img width="1552" height="982" alt="image" src="https://github.com/user-attachments/assets/6f988347-27e0-4017-85ff-0afd83968291" />
 
 ## Quick start
 
