@@ -7,14 +7,21 @@ const OLLAMA_URL = new URL(OLLAMA_HOST);
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const SESSION_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
-const VERSION = process.env.OLLAMA_MANAGER_VERSION || (() => {
-  try {
-    const pkg = JSON.parse(readFileSync("./package.json", "utf-8"));
-    return pkg.version || "dev";
-  } catch {
-    return "dev";
-  }
-})();
+const LITELLM_URL = (process.env.LITELLM_URL || "").trim();
+const LITELLM_KEY = (process.env.LITELLM_KEY || "").trim();
+const LITELLM_SYNC_INTERVAL = parseInt(process.env.LITELLM_SYNC_INTERVAL || "30", 10);
+const LITELLM_ENABLED = !!(LITELLM_URL && LITELLM_KEY);
+
+const VERSION =
+  process.env.OLLAMA_MANAGER_VERSION ||
+  (() => {
+    try {
+      const pkg = JSON.parse(readFileSync("./package.json", "utf-8"));
+      return pkg.version || "dev";
+    } catch {
+      return "dev";
+    }
+  })();
 
 const sessions = new Map<string, number>();
 
@@ -145,10 +152,147 @@ async function serveLibrary(): Promise<Response> {
   }
 }
 
+// =============================================================================
+// LiteLLM Sync
+// =============================================================================
+
+interface SyncDetail {
+  status: "success" | "skipped" | "failed" | "info";
+  message: string;
+}
+
+interface SyncResult {
+  time: number;
+  success: number;
+  failed: number;
+  skipped: number;
+  details: SyncDetail[];
+}
+
+let lastSync: SyncResult | null = null;
+let syncInProgress = false;
+
+async function syncOllamaToLiteLLM(): Promise<SyncResult> {
+  if (syncInProgress)
+    return (
+      lastSync || {
+        time: Date.now(),
+        success: 0,
+        failed: 0,
+        skipped: 0,
+        details: [{ status: "info", message: "Sync already in progress" }],
+      }
+    );
+  syncInProgress = true;
+
+  const result: SyncResult = { time: 0, success: 0, failed: 0, skipped: 0, details: [] };
+
+  try {
+    const [ollamaData, llmData] = await Promise.all([
+      fetch(`${OLLAMA_HOST}/api/tags`).then(async (r) => {
+        if (!r.ok) throw new Error(`Ollama unreachable: HTTP ${r.status}`);
+        return r.json();
+      }),
+      fetch(`${LITELLM_URL}/models`, {
+        headers: { Authorization: `Bearer ${LITELLM_KEY}` },
+      })
+        .then(async (r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+    ]);
+
+    const ollamaModels: string[] = (ollamaData.models || []).map((m: any) => m.name as string);
+
+    if (ollamaModels.length === 0) {
+      result.details.push({ status: "info", message: "No models found in Ollama" });
+      return result;
+    }
+
+    const existingModels = new Set<string>(
+      (llmData?.data || []).map((m: any) => m.id).filter(Boolean),
+    );
+
+    for (const name of ollamaModels) {
+      const fullName = `ollama/${name}`;
+      if (existingModels.has(fullName)) {
+        result.skipped++;
+        result.details.push({ status: "skipped", message: `${name} — already registered` });
+        continue;
+      }
+
+      try {
+        const resp = await fetch(`${LITELLM_URL}/model/new`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LITELLM_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model_name: fullName,
+            litellm_params: {
+              model: fullName,
+              api_base: OLLAMA_HOST,
+            },
+          }),
+        });
+        if (resp.ok) {
+          result.success++;
+          result.details.push({ status: "success", message: `Registered ${name}` });
+        } else {
+          const err = await resp.text();
+          result.failed++;
+          result.details.push({
+            status: "failed",
+            message: `${name}: HTTP ${resp.status} — ${err.slice(0, 100)}`,
+          });
+        }
+      } catch (e: any) {
+        result.failed++;
+        result.details.push({
+          status: "failed",
+          message: `${name}: ${e.message || "Network error"}`,
+        });
+      }
+    }
+  } catch (e: any) {
+    result.details.push({
+      status: "failed",
+      message: `Sync error: ${e.message || "Unknown error"}`,
+    });
+  } finally {
+    syncInProgress = false;
+    result.time = Date.now();
+    lastSync = result;
+  }
+
+  return result;
+}
+
+function getLiteLLMStatus() {
+  return {
+    enabled: LITELLM_ENABLED,
+    url: LITELLM_URL,
+    interval: LITELLM_SYNC_INTERVAL,
+    inProgress: syncInProgress,
+    lastSync: lastSync
+      ? {
+          ...lastSync,
+          details: lastSync.details.slice(-50),
+        }
+      : null,
+  };
+}
+
+// Scheduler
+if (LITELLM_ENABLED && LITELLM_SYNC_INTERVAL > 0) {
+  setInterval(() => {
+    syncOllamaToLiteLLM().catch(() => {});
+  }, LITELLM_SYNC_INTERVAL * 60_000);
+}
+
 Bun.serve({
   port: PORT,
   hostname: "0.0.0.0",
-  fetch(req) {
+  async fetch(req) {
     const url = new URL(req.url);
 
     // Session status (public)
@@ -213,6 +357,18 @@ Bun.serve({
       return serveLibrary();
     }
 
+    // LiteLLM sync status
+    if (url.pathname === "/api/litellm/status" && req.method === "GET") {
+      return Response.json(getLiteLLMStatus());
+    }
+
+    // LiteLLM manual sync trigger
+    if (url.pathname === "/api/litellm/sync" && req.method === "POST") {
+      if (!LITELLM_ENABLED) return jsonError("LiteLLM sync not configured", 400);
+      await syncOllamaToLiteLLM();
+      return Response.json(getLiteLLMStatus());
+    }
+
     return forwardToOllama(req);
   },
   error() {
@@ -225,3 +381,6 @@ if (MASTER_KEY) {
   console.log("Master key authentication enabled");
 }
 console.log(`Configured Ollama endpoint → ${OLLAMA_HOST}`);
+if (LITELLM_ENABLED) {
+  console.log(`LiteLLM sync enabled → ${LITELLM_URL} (every ${LITELLM_SYNC_INTERVAL} min)`);
+}

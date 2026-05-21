@@ -828,6 +828,11 @@ tr:hover td { background: var(--bg3); }
   <div class="nav-item" data-page="embeddings" tabindex="0" role="button">
     <i class="ti ti-vector" aria-hidden="true"></i> Embeddings
   </div>
+
+  <div class="nav-section">Integrations</div>
+  <div class="nav-item" data-page="litellm" tabindex="0" role="button">
+    <i class="ti ti-refresh" aria-hidden="true"></i> LiteLLM Sync
+  </div>
 </nav>
 
 <main>
@@ -1099,6 +1104,33 @@ tr:hover td { background: var(--bg3); }
   <div id="catalog-wrap"><div class="empty"><i class="ti ti-world" aria-hidden="true"></i>Click refresh to load catalog</div></div>
 </div>
 
+<!-- LITELLM -->
+<div class="page" id="page-litellm">
+  <div class="page-header">
+    <div>
+      <div class="page-title">LiteLLM Sync</div>
+      <div class="page-sub">Register Ollama models with your LiteLLM proxy</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><i class="ti ti-info-circle" aria-hidden="true"></i> Status</div>
+    </div>
+    <div id="litellm-status"><div class="empty"><i class="ti ti-refresh" aria-hidden="true"></i>Loading…</div></div>
+  </div>
+  <div class="card" id="litellm-actions" style="display:none">
+    <div class="card-header">
+      <div class="card-title"><i class="ti ti-play" aria-hidden="true"></i> Manual Sync</div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px">
+      <button class="btn btn-primary" id="litellm-sync-btn" onclick="triggerLiteLLMSync()">
+        <i class="ti ti-refresh" aria-hidden="true"></i> Sync Now
+      </button>
+    </div>
+    <div id="litellm-log" class="pull-log" style="display:none"></div>
+  </div>
+</div>
+
 </main>
 
 <!-- Model detail modal -->
@@ -1197,7 +1229,8 @@ const pageLoaders = {
   chat: async () => { await ensureModels(); populateModelSelects(); },
   generate: async () => { await ensureModels(); populateModelSelects(); },
   embeddings: async () => { await ensureModels(); populateModelSelects(); },
-  catalog: () => { refreshRunning(); if (!catalogData.length) loadCatalog(); }
+  catalog: () => { refreshRunning(); if (!catalogData.length) loadCatalog(); },
+  litellm: loadLiteLLMStatus,
 };
 
 function nav(el) {
@@ -1669,6 +1702,72 @@ async function doEmbed() {
   } catch(e) { toast('Embed failed: ' + e.message, 'error'); }
 }
 
+// =============================================================================
+// LiteLLM Sync
+// =============================================================================
+
+function syncLogClass(status) {
+  return { success: 'ok', failed: 'err', skipped: '' }[status] || '';
+}
+
+function renderLiteLLMStatus(statusDiv, actionsDiv, d) {
+  if (!d.enabled) {
+    statusDiv.innerHTML = `<div class="empty"><i class="ti ti-x" aria-hidden="true"></i>LiteLLM sync is not configured.<br><span style="color:var(--text3);font-size:12px">Set LITELLM_URL and LITELLM_KEY environment variables.</span></div>`;
+    actionsDiv.style.display = 'none';
+    return;
+  }
+  actionsDiv.style.display = 'block';
+  const last = d.lastSync;
+  if (!last) {
+    statusDiv.innerHTML = `<div class="empty"><i class="ti ti-info-circle" aria-hidden="true"></i>LiteLLM sync is configured but has not run yet.<br><span style="color:var(--text3);font-size:12px">URL: ${escHtml(d.url)} · Interval: ${d.interval} min</span></div>`;
+    return;
+  }
+  const ts = new Date(last.time).toLocaleString();
+  statusDiv.innerHTML = `<div style="margin-bottom:8px;font-size:12px;color:var(--text3)">Last run: ${escHtml(ts)} · URL: ${escHtml(d.url)} · Interval: ${d.interval} min</div>
+    <div class="info-grid" style="margin-bottom:12px">
+      <div class="info-item"><div class="info-label">Successful</div><div class="info-value" style="color:var(--success)">${last.success}</div></div>
+      <div class="info-item"><div class="info-label">Skipped</div><div class="info-value" style="color:var(--warning)">${last.skipped}</div></div>
+      <div class="info-item"><div class="info-label">Failed</div><div class="info-value" style="color:var(--danger)">${last.failed}</div></div>
+    </div>
+    <div class="pull-log" style="max-height:200px">${last.details.map(l => `<span class="log-line ${syncLogClass(l.status)}">${escHtml(l.message)}</span>`).join('')}</div>`;
+}
+
+async function loadLiteLLMStatus() {
+  const statusDiv = document.getElementById('litellm-status');
+  const actionsDiv = document.getElementById('litellm-actions');
+  try {
+    const r = await api('/api/litellm/status');
+    const d = await r.json();
+    renderLiteLLMStatus(statusDiv, actionsDiv, d);
+  } catch(e) {
+    statusDiv.innerHTML = `<div class="empty"><i class="ti ti-alert-circle" aria-hidden="true"></i>Failed to load LiteLLM status</div>`;
+    actionsDiv.style.display = 'none';
+  }
+}
+
+async function triggerLiteLLMSync() {
+  const btn = document.getElementById('litellm-sync-btn');
+  const logDiv = document.getElementById('litellm-log');
+  const statusDiv = document.getElementById('litellm-status');
+  const actionsDiv = document.getElementById('litellm-actions');
+  btn.disabled = true;
+  logDiv.style.display = 'block';
+  logDiv.innerHTML = '<span class="log-line">Syncing models…</span>';
+  try {
+    const r = await api('/api/litellm/sync', { method: 'POST' });
+    if (!r.ok) throw new Error(await httpErrorDetail(r));
+    const d = await r.json();
+    const result = d.lastSync;
+    logDiv.innerHTML = result.details.map(l => `<span class="log-line ${syncLogClass(l.status)}">${escHtml(l.message)}</span>`).join('');
+    toast(`LiteLLM sync complete — ${result.success} success, ${result.failed} failed, ${result.skipped} skipped`, result.failed > 0 ? 'warning' : 'success');
+    renderLiteLLMStatus(statusDiv, actionsDiv, d);
+  } catch(e) {
+    logDiv.innerHTML = `<span class="log-line err">Sync failed: ${escHtml(e.message)}</span>`;
+    toast('LiteLLM sync failed', 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
 
 let catalogData = [];
 let catCapFilter = 'all';

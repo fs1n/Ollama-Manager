@@ -8,3 +8,6 @@ services:
       - OLLAMA_HOST=http://host.docker.internal:11434
       # Optional: require master key to access the UI
       # - MASTER_KEY=your-secret-key-here
+      - LITELLM_URL=http://10.10.0.1:4000
+      - LITELLM_KEY=changeme_litellm_master_key
+      - LITELLM_SYNC_INTERVAL=30   # Minuten, 0 = auto-sync aus
