@@ -498,7 +498,85 @@ tr:hover td { background: var(--bg3); }
   align-items: center;
   gap: 8px;
 }
-.cat-filter.active { background: var(--accent); color: #0f0f0f; border-color: transparent; }
+.catalog-desc {
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.catalog-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.cap-badge {
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.cap-tools { background: rgba(99,102,241,0.12); color: #818cf8; border: 1px solid rgba(99,102,241,0.25); }
+.cap-vision { background: rgba(34,197,94,0.12); color: #4ade80; border: 1px solid rgba(34,197,94,0.25); }
+.cap-embedding { background: rgba(251,146,60,0.12); color: #fb923c; border: 1px solid rgba(251,146,60,0.25); }
+.cap-thinking { background: rgba(168,85,247,0.12); color: #c084fc; border: 1px solid rgba(168,85,247,0.25); }
+.cap-audio { background: rgba(59,130,246,0.12); color: #60a5fa; border: 1px solid rgba(59,130,246,0.25); }
+.size-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.06);
+  color: var(--text3);
+  border: 1px solid var(--border);
+}
+.cat-cap, .cat-view { transition: background-color 0.15s, color 0.15s, border-color 0.15s; }
+.cat-cap.active { background: var(--accent); color: #0f0f0f; border-color: transparent; }
+.cat-view.active { background: var(--bg4); color: var(--accent); border-color: var(--accent); }
+.catalog-card.installed { border-color: rgba(200,240,96,0.3); background: rgba(200,240,96,0.03); }
+.catalog-card .installed-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(200,240,96,0.12);
+  color: var(--accent);
+  border: 1px solid rgba(200,240,96,0.25);
+}
+.catalog-card .running-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 6px var(--success);
+  animation: pulse 2s infinite;
+  flex-shrink: 0;
+}
+
+.modal pre.rich { padding: 0; background: transparent; border: none; white-space: normal; }
+
+.tag-pick-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--text);
+  transition: background-color 0.15s, border-color 0.15s;
+  width: 100%;
+  text-align: left;
+}
+.tag-pick-btn:hover { background: var(--bg4); border-color: var(--border2); }
+.tag-pick-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.tag-pick-btn:disabled:hover { background: var(--bg3); border-color: var(--border); }
+.tag-pick-btn.installed { border-color: rgba(200,240,96,0.25); background: rgba(200,240,96,0.02); }
+
+.cap-badge.cap-cloud { background: rgba(59,130,246,0.12); color: #60a5fa; border: 1px solid rgba(59,130,246,0.25); }
 
 .modal-overlay {
   position: fixed; inset: 0;
@@ -617,6 +695,8 @@ tr:hover td { background: var(--bg3); }
   .btn { padding: 6px 12px; font-size: 12px; }
   .btn i { font-size: 13px; }
   #catalog-search { width: 100% !important; max-width: none; }
+  #catalog-cap-filters, #catalog-view-toggle { gap: 4px; }
+  .cat-cap, .cat-view { font-size: 11px; padding: 3px 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -626,9 +706,44 @@ tr:hover td { background: var(--bg3); }
     transition-duration: 0.01ms !important;
   }
 }
+
+#login-overlay {
+  position: fixed; inset: 0; z-index: 2000;
+  background: var(--bg);
+  display: none; align-items: center; justify-content: center;
+}
+#login-overlay.open { display: flex; }
+.login-box {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  width: 340px;
+  max-width: 90vw;
+}
+.login-logo { justify-content: center; margin-bottom: 20px; }
+.login-subtitle { text-align: center; margin-bottom: 20px; color: var(--text2); font-size: 13px; }
+.login-input { margin-bottom: 12px; }
+.login-btn { width: 100%; }
+.login-error { color: var(--danger); font-size: 12px; text-align: center; margin-top: 12px; display: none; }
 </style>
 </head>
 <body>
+
+<div id="login-overlay">
+  <div class="login-box">
+    <div class="logo login-logo">
+      <div class="logo-dot"></div>
+      ollama manager
+    </div>
+    <div class="login-subtitle">Enter master key to continue</div>
+    <input type="password" id="login-key" placeholder="Master key" autocomplete="off" class="login-input">
+    <button class="btn btn-primary login-btn" onclick="doLogin()">
+      <i class="ti ti-lock" aria-hidden="true"></i> Unlock
+    </button>
+    <div id="login-error" class="login-error"></div>
+  </div>
+</div>
 
 <header>
   <div class="logo">
@@ -639,6 +754,9 @@ tr:hover td { background: var(--bg3); }
     <div class="status-dot" id="status-dot"></div>
     <span id="status-text">disconnected</span>
   </div>
+  <button class="btn btn-sm" id="logout-btn" onclick="doLogout()" style="display:none;margin-left:auto">
+    <i class="ti ti-logout" aria-hidden="true"></i> Logout
+  </button>
 </header>
 
 <nav>
@@ -925,16 +1043,23 @@ tr:hover td { background: var(--bg3); }
       <div class="page-sub">All models available on ollama.com — click to pull</div>
     </div>
     <div style="display:flex;gap:10px;align-items:center">
-      <input type="text" id="catalog-search" placeholder="Search models…" aria-label="Search models" style="width:220px" oninput="filterCatalog()">
+      <input type="text" id="catalog-search" placeholder="Search models…" aria-label="Search models" style="width:220px" oninput="debouncedFilterCatalog()">
       <button class="btn" onclick="loadCatalog()"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
     </div>
   </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px" id="catalog-size-filters">
-    <button class="btn btn-sm cat-filter active" data-filter="all">All</button>
-    <button class="btn btn-sm cat-filter" data-filter="small">Small (&lt;10 GB)</button>
-    <button class="btn btn-sm cat-filter" data-filter="medium">Medium (10–50 GB)</button>
-    <button class="btn btn-sm cat-filter" data-filter="large">Large (&gt;50 GB)</button>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px" id="catalog-cap-filters">
+    <button class="btn btn-sm cat-cap active" data-cap="all">All</button>
+    <button class="btn btn-sm cat-cap" data-cap="tools"><i class="ti ti-tool" aria-hidden="true"></i> Tools</button>
+    <button class="btn btn-sm cat-cap" data-cap="vision"><i class="ti ti-eye" aria-hidden="true"></i> Vision</button>
+    <button class="btn btn-sm cat-cap" data-cap="embedding"><i class="ti ti-vector" aria-hidden="true"></i> Embedding</button>
+    <button class="btn btn-sm cat-cap" data-cap="thinking"><i class="ti ti-brain" aria-hidden="true"></i> Thinking</button>
+    <button class="btn btn-sm cat-cap" data-cap="audio"><i class="ti ti-volume" aria-hidden="true"></i> Audio</button>
     <span style="margin-left:auto;font-size:12px;color:var(--text3);align-self:center" id="catalog-count"></span>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px" id="catalog-view-toggle">
+    <button class="btn btn-sm cat-view active" data-view="all">All models</button>
+    <button class="btn btn-sm cat-view" data-view="installed"><i class="ti ti-check" aria-hidden="true"></i> Installed</button>
+    <button class="btn btn-sm cat-view" data-view="running"><i class="ti ti-player-play" aria-hidden="true"></i> Running</button>
   </div>
   <div id="catalog-wrap"><div class="empty"><i class="ti ti-world" aria-hidden="true"></i>Click refresh to load catalog</div></div>
 </div>
@@ -972,10 +1097,22 @@ async function fetchModels() {
 
 function api(path, opts = {}) {
   const { headers: customHeaders, ...rest } = opts;
-  return fetch(path, {
-    headers: { 'Content-Type': 'application/json', ...customHeaders },
-    ...rest
+  const token = sessionStorage.getItem('sessionToken');
+  const headers = { 'Content-Type': 'application/json', ...customHeaders };
+  if (token) headers['X-Session-Token'] = token;
+  return fetch(path, { headers, ...rest }).then(r => {
+    if (r.status === 401) {
+      sessionStorage.removeItem('sessionToken');
+      document.getElementById('login-overlay').classList.add('open');
+    }
+    return r;
   });
+}
+
+let catalogDebounce;
+function debouncedFilterCatalog() {
+  clearTimeout(catalogDebounce);
+  catalogDebounce = setTimeout(renderCatalog, 150);
 }
 
 async function* readNdjsonLines(response) {
@@ -1015,13 +1152,24 @@ const pageLoaders = {
   chat: populateModelSelects,
   generate: populateModelSelects,
   embeddings: populateModelSelects,
-  catalog: () => { if (!catalogData.length) loadCatalog(); }
+  catalog: () => { refreshRunning(); if (!catalogData.length) loadCatalog(); }
 };
 
 function nav(el) {
-  activatePage(el.dataset.page);
-  pageLoaders[el.dataset.page]?.();
+  const page = el.dataset.page;
+  activatePage(page);
+  location.hash = page;
+  pageLoaders[page]?.();
 }
+
+window.addEventListener('hashchange', () => {
+  const page = location.hash.slice(1) || 'dashboard';
+  const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
+  if (!navItem) return;
+  if (navItem.classList.contains('active')) return;
+  activatePage(page);
+  pageLoaders[page]?.();
+});
 
 function toast(msg, type = 'info') {
   const el = document.createElement('div');
@@ -1037,6 +1185,47 @@ function setStatus(ok, version) {
   const txt = document.getElementById('status-text');
   dot.className = 'status-dot ' + (ok ? 'connected' : 'error');
   txt.textContent = ok ? 'v' + version : 'error';
+}
+
+async function checkSession() {
+  try {
+    const r = await api('/api/session');
+    const d = await r.json();
+    if (d.authRequired) {
+      document.getElementById('logout-btn').style.display = 'inline-flex';
+    }
+    if (d.authRequired && !d.authenticated) {
+      document.getElementById('login-overlay').classList.add('open');
+      return;
+    }
+  } catch(e) {
+    toast('Session check failed', 'error');
+  }
+}
+
+async function doLogin() {
+  const key = document.getElementById('login-key').value.trim();
+  const err = document.getElementById('login-error');
+  err.style.display = 'none';
+  if (!key) return;
+  try {
+    const r = await api('/api/auth', { method: 'POST', body: JSON.stringify({ key }) });
+    if (!r.ok) throw new Error('Invalid key');
+    const d = await r.json();
+    sessionStorage.setItem('sessionToken', d.token);
+    document.getElementById('login-overlay').classList.remove('open');
+    document.getElementById('logout-btn').style.display = 'inline-flex';
+    connect();
+  } catch(e) {
+    err.textContent = 'Invalid master key';
+    err.style.display = 'block';
+  }
+}
+
+async function doLogout() {
+  await api('/api/logout', { method: 'POST' });
+  sessionStorage.removeItem('sessionToken');
+  location.reload();
 }
 
 async function connect() {
@@ -1060,6 +1249,7 @@ async function loadDashboard() {
     const runD = await runR.json();
     modelCache = modD.models || [];
     const running = runD.models || [];
+    runningNames = new Set(running.map(m => m.name));
     document.getElementById('dash-model-count').textContent = modelCache.length;
     document.getElementById('dash-running-count').textContent = running.length;
     const runList = document.getElementById('dash-running-list');
@@ -1106,17 +1296,15 @@ async function loadModels() {
 
 async function loadRunning() {
   try {
-    const r = await api('/api/ps');
-    const d = await r.json();
-    const running = d.models || [];
+    const models = await refreshRunning();
     const wrap = document.getElementById('running-wrap');
-    if (running.length === 0) {
+    if (models.length === 0) {
       wrap.innerHTML = '<div class="empty"><i class="ti ti-player-pause" aria-hidden="true"></i>No models currently loaded</div>';
       return;
     }
     wrap.innerHTML = `<div class="table-wrap"><table>
       <thead><tr><th>Model</th><th>Size</th><th>VRAM</th><th>Expires</th></tr></thead>
-      <tbody>${running.map(m => `<tr>
+      <tbody>${models.map(m => `<tr>
         <td>${escHtml(m.name)}</td>
         <td>${fmtSize(m.size)}</td>
         <td>${fmtSize(m.size_vram)}</td>
@@ -1133,11 +1321,7 @@ async function showModel(name) {
       body: JSON.stringify({ model: name })
     });
     const d = await r.json();
-    document.getElementById('modal-title-text').textContent = name;
-    document.getElementById('modal-body').textContent = JSON.stringify(d, null, 2);
-    const overlay = document.getElementById('modal-overlay');
-    overlay.classList.add('open');
-    overlay.querySelector('.btn')?.focus();
+    openModal(name, JSON.stringify(d, null, 2), { focus: true });
   } catch(e) { toast('Failed to load model info', 'error'); }
 }
 
@@ -1425,26 +1609,34 @@ async function doEmbed() {
 
 
 let catalogData = [];
-let catSizeFilter = 'all';
+let catCapFilter = 'all';
+let catView = 'all';
+let runningNames = new Set();
 
 async function loadCatalog() {
   const wrap = document.getElementById('catalog-wrap');
   wrap.innerHTML = '<div class="empty"><span class="spinner"></span> Loading catalog…</div>';
   try {
-    const r = await api('/api/proxy/catalog');
+    const r = await api('/api/catalog/library');
     const d = await r.json();
-    catalogData = (d.models || []).sort((a,b) => new Date(b.modified_at) - new Date(a.modified_at));
+    catalogData = d.models || [];
     renderCatalog();
     toast(`Loaded ${catalogData.length} models from registry`, 'success');
   } catch(e) {
-    wrap.innerHTML = '<div class="empty"><i class="ti ti-alert-circle" aria-hidden="true"></i>Failed to load catalog — CORS? Try serving the file via HTTP.</div>';
+    wrap.innerHTML = '<div class="empty"><i class="ti ti-alert-circle" aria-hidden="true"></i>Failed to load catalog</div>';
     toast('Catalog load failed: ' + e.message, 'error');
   }
 }
 
-function setCatFilter(val) {
-  document.querySelectorAll('.cat-filter').forEach(b => b.classList.toggle('active', b.dataset.filter === val));
-  catSizeFilter = val;
+function setCatCap(val) {
+  document.querySelectorAll('.cat-cap').forEach(b => b.classList.toggle('active', b.dataset.cap === val));
+  catCapFilter = val;
+  renderCatalog();
+}
+
+function setCatView(val) {
+  document.querySelectorAll('.cat-view').forEach(b => b.classList.toggle('active', b.dataset.view === val));
+  catView = val;
   renderCatalog();
 }
 
@@ -1452,37 +1644,42 @@ function filterCatalog() { renderCatalog(); }
 
 function renderCatalog() {
   const q = (document.getElementById('catalog-search').value || '').toLowerCase();
-  const installedNames = new Set(modelCache.map(m => m.name));
+  const installedBaseNames = new Set(modelCache.map(m => baseName(m.name)));
+  const runningBaseNames = new Set([...runningNames].map(n => baseName(n)));
+  const firstInstalledMap = new Map(modelCache.map(m => [baseName(m.name), m.name]));
+
   let filtered = catalogData.filter(m => {
-    if (q && !m.name.toLowerCase().includes(q)) return false;
-    if (catSizeFilter === 'small' && m.size >= 10e9) return false;
-    if (catSizeFilter === 'medium' && (m.size < 10e9 || m.size > 50e9)) return false;
-    if (catSizeFilter === 'large' && m.size <= 50e9) return false;
+    if (q && !m.name.toLowerCase().includes(q) && !(m.description || '').toLowerCase().includes(q)) return false;
+    if (catCapFilter !== 'all' && !m.capabilities.includes(catCapFilter)) return false;
+    const inst = installedBaseNames.has(m.name);
+    if (catView === 'installed' && !inst) return false;
+    if (catView === 'running' && !runningBaseNames.has(m.name)) return false;
     return true;
   });
+
   document.getElementById('catalog-count').textContent = filtered.length + ' models';
   if (filtered.length === 0) {
     document.getElementById('catalog-wrap').innerHTML = '<div class="empty"><i class="ti ti-search" aria-hidden="true"></i>No models match</div>';
     return;
   }
   document.getElementById('catalog-wrap').innerHTML = `<div class="catalog-grid">${filtered.map(m => {
-    const inst = installedNames.has(m.name);
-    const age = fmtAge(m.modified_at);
-    const baseName = m.name.split(':')[0];
+    const inst = installedBaseNames.has(m.name);
+    const running = runningBaseNames.has(m.name);
+    const firstInstalled = firstInstalledMap.get(m.name);
     return `<div class="catalog-card${inst?' installed':''}">
       <div class="catalog-name">
+        ${running ? '<span class="running-dot" title="Running"></span>' : ''}
         <span>${escHtml(m.name)}</span>
-        ${inst ? '<span class="badge running" style="font-size:10px">installed</span>' : ''}
+        ${inst ? '<span class="installed-badge">installed</span>' : ''}
       </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-        <span class="badge">${fmtSize(m.size)}</span>
-        <span class="badge" style="color:var(--text3)">${age}</span>
-      </div>
+      ${m.description ? `<div class="catalog-desc">${escHtml(m.description)}</div>` : ''}
+      <div class="catalog-badges">${renderCaps(m.capabilities)}${renderSizes(m.sizes)}</div>
       <div style="display:flex;gap:8px;margin-top:4px">
-        <button class="btn btn-sm btn-primary" style="flex:1" data-action="quick-pull" data-model="${escAttr(m.name)}">
-          <i class="ti ti-download" aria-hidden="true"></i> Pull
-        </button>
-        <a class="btn btn-sm" href="https://ollama.com/library/${encodeURIComponent(baseName)}" target="_blank" rel="noopener">
+        ${inst
+          ? `<button class="btn btn-sm" style="flex:1" data-action="info" data-model="${escAttr(firstInstalled)}"><i class="ti ti-info-circle" aria-hidden="true"></i> Details</button>`
+          : `<button class="btn btn-sm btn-primary" style="flex:1" data-action="quick-pull" data-model="${escAttr(m.name)}"><i class="ti ti-download" aria-hidden="true"></i> Pull</button>`
+        }
+        <a class="btn btn-sm" href="https://ollama.com/library/${encodeURIComponent(baseName(m.name))}" target="_blank" rel="noopener" title="View on ollama.com">
           <i class="ti ti-external-link" aria-hidden="true"></i>
         </a>
       </div>
@@ -1490,23 +1687,82 @@ function renderCatalog() {
   }).join('')}</div>`;
 }
 
-function quickPull(name) {
+function showTagPicker(name) {
+  const m = catalogData.find(x => x.name === name);
+  if (!m) return;
+  const sizes = m.sizes || [];
+  const hasThinking = m.capabilities?.includes('thinking');
+  const hasVision = m.capabilities?.includes('vision');
+  const isCloud = sizes.length === 0 && (hasThinking || hasVision);
+  const tags = isCloud
+    ? ['cloud']
+    : sizes.length > 0
+      ? ['latest', ...sizes.filter(s => s !== 'latest')]
+      : ['latest', 'cloud'];
+  const installedNames = new Set(modelCache.map(x => x.name));
+
+  const content =
+    `<div style="font-family:var(--sans);font-size:13px;color:var(--text2);margin-bottom:16px">${escHtml(m.description || '')}</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${tags.map(t => {
+        const fullTag = name + ':' + t;
+        const installed = installedNames.has(fullTag);
+        return `<button class="tag-pick-btn${installed ? ' installed' : ''}"
+          onclick="pullTag('${escAttr(fullTag)}')"
+          ${installed ? 'disabled' : ''}>
+          <span style="font-family:var(--mono);font-size:13px;color:var(--text)">${escHtml(fullTag)}</span>
+          ${t === 'latest' ? '<span class="badge">default</span>' : ''}
+          ${t === 'cloud' ? '<span class="cap-badge cap-cloud">cloud</span>' : ''}
+          ${installed ? '<span class="installed-badge">already installed</span>' : '<span class="cap-badge cap-tools" style="margin-left:auto">pull</span>'}
+        </button>`;
+      }).join('')}
+    </div>`;
+  openModal('Pull ' + name, content, { rich: true });
+}
+
+function pullTag(name) {
+  document.getElementById('modal-overlay').classList.remove('open');
   document.getElementById('pull-model').value = name;
   activatePage('pull');
-  pullModel();
 }
 
-function fmtAge(iso) {
-  if (!iso) return '';
-  const diff = Date.now() - new Date(iso).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days < 1) return 'today';
-  if (days < 30) return days + 'd ago';
-  const months = Math.floor(days/30);
-  if (months < 12) return months + 'mo ago';
-  return Math.floor(months/12) + 'y ago';
+async function refreshRunning() {
+  try {
+    const r = await api('/api/ps');
+    if (r.ok) {
+      const d = await r.json();
+      const models = d.models || [];
+      runningNames = new Set(models.map(m => m.name));
+      return models;
+    }
+  } catch(_) {}
+  return [];
 }
 
+
+function showCatalogDetail(name) {
+  const m = catalogData.find(x => x.name === name);
+  if (!m) return;
+  const inst = modelCache.some(x => baseName(x.name) === name);
+  const running = [...runningNames].some(n => baseName(n) === name);
+  const content =
+    `<div style="font-family:var(--sans);font-size:13px;line-height:1.7;color:var(--text)">
+      <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        ${inst ? '<span class="installed-badge">installed</span>' : ''}
+        ${running ? '<span class="badge running">running</span>' : ''}
+        ${!inst ? '<span class="badge">not installed</span>' : ''}
+      </div>
+      ${m.description ? '<p style="margin-bottom:16px;color:var(--text2)">' + escHtml(m.description) + '</p>' : ''}
+      <div style="margin-bottom:8px;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Capabilities</div>
+      <div style="margin-bottom:16px">${renderCaps(m.capabilities) || '<span style="color:var(--text3);font-size:12px">none</span>'}</div>
+      <div style="margin-bottom:8px;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Sizes</div>
+      <div style="margin-bottom:16px">${renderSizes(m.sizes) || '<span style="color:var(--text3);font-size:12px">various</span>'}</div>
+      <a href="https://ollama.com/library/${encodeURIComponent(baseName(name))}" target="_blank" rel="noopener" class="btn btn-sm" style="display:inline-flex">
+        <i class="ti ti-external-link" aria-hidden="true"></i> View on ollama.com
+      </a>
+    </div>`;
+  openModal(name, content, { rich: true, focus: true });
+}
 
 function closeModal(e) {
   if (e.target.id === 'modal-overlay') document.getElementById('modal-overlay').classList.remove('open');
@@ -1532,6 +1788,22 @@ function escAttr(s) {
           .replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
 }
 
+function baseName(n) { return n.split(':')[0]; }
+
+function renderCaps(caps) { return (caps || []).map(c => `<span class="cap-badge cap-${c}">${c}</span>`).join(''); }
+function renderSizes(sizes) { return (sizes || []).map(s => `<span class="size-badge">${s}</span>`).join(''); }
+
+function openModal(title, content, { rich = false, focus = false } = {}) {
+  const body = document.getElementById('modal-body');
+  body.classList.toggle('rich', rich);
+  if (rich) body.innerHTML = content;
+  else body.textContent = content;
+  document.getElementById('modal-title-text').textContent = title;
+  const overlay = document.getElementById('modal-overlay');
+  overlay.classList.add('open');
+  if (focus) overlay.querySelector('.btn')?.focus();
+}
+
 // Event delegation: sidebar navigation
 document.querySelector('nav').addEventListener('click', e => {
   const item = e.target.closest('[data-page]');
@@ -1553,19 +1825,38 @@ document.getElementById('model-grid-wrap').addEventListener('click', e => {
   if (btn.dataset.action === 'delete') deleteModel(name);
 });
 
-// Event delegation: catalog size filters
-document.getElementById('catalog-size-filters').addEventListener('click', e => {
-  const btn = e.target.closest('[data-filter]');
-  if (btn) setCatFilter(btn.dataset.filter);
+// Event delegation: catalog capability filters
+document.getElementById('catalog-cap-filters').addEventListener('click', e => {
+  const btn = e.target.closest('[data-cap]');
+  if (btn) setCatCap(btn.dataset.cap);
 });
 
-// Event delegation: catalog grid (quickPull)
+// Event delegation: catalog view toggle
+document.getElementById('catalog-view-toggle').addEventListener('click', e => {
+  const btn = e.target.closest('[data-view]');
+  if (btn) setCatView(btn.dataset.view);
+});
+
+// Event delegation: catalog grid (quickPull + info)
 document.getElementById('catalog-wrap').addEventListener('click', e => {
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
-  if (btn.dataset.action === 'quick-pull') quickPull(btn.dataset.model);
+  if (btn.dataset.action === 'quick-pull') showTagPicker(btn.dataset.model);
+  if (btn.dataset.action === 'info') {
+    if (modelCache.some(x => x.name === btn.dataset.model)) showModel(btn.dataset.model);
+    else showCatalogDetail(btn.dataset.model);
+  }
 });
 
+document.getElementById('login-key').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+const startPage = document.querySelector(`.nav-item[data-page="${location.hash.slice(1)}"]`) ? location.hash.slice(1) : 'dashboard';
+activatePage(startPage);
+pageLoaders[startPage]?.();
+
+checkSession();
 connect();
 </script>
 </body>
