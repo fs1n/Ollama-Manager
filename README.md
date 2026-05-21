@@ -11,6 +11,8 @@ Features:
 
 <img width="1552" height="982" alt="image" src="https://github.com/user-attachments/assets/6f988347-27e0-4017-85ff-0afd83968291" />
 
+More screenshots: [Screenshots.md](https://github.com/fs1n/Ollama-Manager/blob/main/screenshots.md)
+
 ## Quick start
 
 ### Docker Compose
