@@ -1,4 +1,6 @@
-const MASTER_KEY = process.env.MASTER_KEY || "";
+import { timingSafeEqual } from "node:crypto";
+
+const MASTER_KEY = (process.env.MASTER_KEY || "").trim();
 const OLLAMA_HOST = (process.env.OLLAMA_HOST || "http://localhost:11434").replace(/\/$/, "");
 const OLLAMA_URL = new URL(OLLAMA_HOST);
 const PORT = parseInt(process.env.PORT || "3000", 10);
@@ -39,7 +41,9 @@ function isSessionValid(token: string): boolean {
 
 function timingSafeCompare(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  return timingSafeEqual(aBuf, bBuf);
 }
 
 async function forwardToOllama(req: Request): Promise<Response> {
@@ -129,6 +133,7 @@ async function serveLibrary(): Promise<Response> {
 
 Bun.serve({
   port: PORT,
+  hostname: "0.0.0.0",
   fetch(req) {
     const url = new URL(req.url);
 
@@ -171,17 +176,17 @@ Bun.serve({
       });
     }
 
-    // Auth gate
+    // Static files (public — frontend handles login UI)
+    if (url.pathname === "/" || !url.pathname.startsWith("/api/")) {
+      return new Response(Bun.file("./public/index.html"));
+    }
+
+    // Auth gate (API only)
     if (MASTER_KEY) {
       const token = req.headers.get("x-session-token") || "";
       if (!isSessionValid(token)) {
         return jsonError("Unauthorized", 401);
       }
-    }
-
-    // Static files
-    if (url.pathname === "/" || !url.pathname.startsWith("/api/")) {
-      return new Response(Bun.file("./public/index.html"));
     }
 
     // API routes
@@ -196,7 +201,7 @@ Bun.serve({
   },
 });
 
-console.log(`Ollama Manager → http://localhost:${PORT}`);
+console.log(`Ollama Manager → http://0.0.0.0:${PORT}`);
 if (MASTER_KEY) {
   console.log("Master key authentication enabled");
 }

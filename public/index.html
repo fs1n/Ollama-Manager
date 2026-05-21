@@ -208,7 +208,7 @@ main {
 .btn i { font-size: 14px; }
 
 /* Form elements */
-input[type="text"], input[type="number"], textarea, select {
+input[type="text"], input[type="password"], input[type="number"], textarea, select {
   background: var(--bg3);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1184,7 +1184,7 @@ function setStatus(ok, version) {
   const dot = document.getElementById('status-dot');
   const txt = document.getElementById('status-text');
   dot.className = 'status-dot ' + (ok ? 'connected' : 'error');
-  txt.textContent = ok ? 'v' + version : 'error';
+  txt.textContent = ok ? (version && version !== 'unknown' ? 'v' + version : 'unknown') : 'unreachable';
 }
 
 async function checkSession() {
@@ -1232,12 +1232,14 @@ async function connect() {
   try {
     const r = await api('/api/version');
     const d = await r.json();
-    setStatus(true, d.version);
-    document.getElementById('dash-version').textContent = d.version;
-    toast('Connected to Ollama ' + d.version, 'success');
+    const version = d.version || 'unknown';
+    setStatus(true, version);
+    document.getElementById('dash-version').textContent = version;
+    toast('Connected to Ollama ' + version, 'success');
     await loadDashboard();
   } catch(e) {
     setStatus(false, '');
+    document.getElementById('dash-version').textContent = '—';
     toast('Ollama unreachable', 'error');
   }
 }
