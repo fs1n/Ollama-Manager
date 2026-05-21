@@ -760,6 +760,28 @@ tr:hover td { background: var(--bg3); }
 .login-input { margin-bottom: 12px; }
 .login-btn { width: 100%; }
 .login-error { color: var(--danger); font-size: 12px; text-align: center; margin-top: 12px; display: none; }
+
+.search-wrap { position: relative; }
+.search-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  padding: 4px 6px;
+  font-size: 14px;
+  line-height: 1;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+.search-clear:hover { color: var(--text); }
+.search-wrap:has(#catalog-search:not(:placeholder-shown)) .search-clear { display: flex; }
+#catalog-search { padding-right: 28px; }
+
 </style>
 </head>
 <body>
@@ -1082,8 +1104,18 @@ tr:hover td { background: var(--bg3); }
       <div class="page-title">Registry catalog</div>
       <div class="page-sub">All models available on ollama.com — click to pull</div>
     </div>
-    <div style="display:flex;gap:10px;align-items:center">
-      <input type="text" id="catalog-search" placeholder="Search models…" aria-label="Search models" style="width:220px" oninput="debouncedFilterCatalog()">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div class="search-wrap">
+        <input type="text" id="catalog-search" placeholder="Search models…" aria-label="Search models" style="width:220px" oninput="debouncedFilterCatalog()">
+        <button class="search-clear" id="catalog-search-clear" onclick="clearCatalogSearch()" aria-label="Clear search"><i class="ti ti-x" aria-hidden="true"></i></button>
+      </div>
+      <select id="catalog-size" style="width:145px" onchange="renderCatalog()">
+        <option value="any">Any size</option>
+        <option value="7">Small (≤7B)</option>
+        <option value="13">Medium (≤13B)</option>
+        <option value="70">Large (≤70B)</option>
+      </select>
+      <button class="btn btn-sm" id="catalog-sort" onclick="toggleCatalogSort()" title="Sort A–Z"><i class="ti ti-sort-ascending" aria-hidden="true"></i></button>
       <button class="btn" onclick="loadCatalog()"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
     </div>
   </div>
@@ -1771,9 +1803,33 @@ async function triggerLiteLLMSync() {
 
 let catalogData = [];
 let catCapFilter = 'all';
+let catSizeFilter = 'any';
+let catSort = 'asc';
 let catView = 'all';
 let runningNames = new Set();
 let authRequired = false;
+
+function clearCatalogSearch() {
+  const input = document.getElementById('catalog-search');
+  input.value = '';
+  input.focus();
+  renderCatalog();
+}
+
+function toggleCatalogSort() {
+  catSort = catSort === 'asc' ? 'desc' : 'asc';
+  const btn = document.getElementById('catalog-sort');
+  btn.title = catSort === 'asc' ? 'Sort A–Z' : 'Sort Z–A';
+  btn.innerHTML = catSort === 'asc'
+    ? '<i class="ti ti-sort-ascending" aria-hidden="true"></i>'
+    : '<i class="ti ti-sort-descending" aria-hidden="true"></i>';
+  renderCatalog();
+}
+
+function parseModelSize(s) {
+  const n = parseFloat(s);
+  return isNaN(n) ? Infinity : n;
+}
 
 async function loadCatalog() {
   const wrap = document.getElementById('catalog-wrap');
@@ -1806,6 +1862,7 @@ function filterCatalog() { renderCatalog(); }
 
 function renderCatalog() {
   const q = (document.getElementById('catalog-search').value || '').toLowerCase();
+  const sizeFilter = document.getElementById('catalog-size').value;
   const installedBaseNames = new Set(modelCache.map(m => baseName(m.name)));
   const runningBaseNames = new Set([...runningNames].map(n => baseName(n)));
   const firstInstalledMap = new Map(modelCache.map(m => [baseName(m.name), m.name]));
@@ -1813,10 +1870,20 @@ function renderCatalog() {
   let filtered = catalogData.filter(m => {
     if (q && !m.name.toLowerCase().includes(q) && !(m.description || '').toLowerCase().includes(q)) return false;
     if (catCapFilter !== 'all' && !m.capabilities.includes(catCapFilter)) return false;
+    if (sizeFilter !== 'any') {
+      const max = parseFloat(sizeFilter);
+      const hasMatch = (m.sizes || []).some(s => parseModelSize(s) <= max);
+      if (!hasMatch) return false;
+    }
     const inst = installedBaseNames.has(m.name);
     if (catView === 'installed' && !inst) return false;
     if (catView === 'running' && !runningBaseNames.has(m.name)) return false;
     return true;
+  });
+
+  filtered.sort((a, b) => {
+    const cmp = a.name.localeCompare(b.name);
+    return catSort === 'asc' ? cmp : -cmp;
   });
 
   document.getElementById('catalog-count').textContent = filtered.length + ' models';
@@ -1932,6 +1999,13 @@ function closeModal(e) {
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') document.getElementById('modal-overlay').classList.remove('open');
+});
+
+document.getElementById('catalog-search').addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    e.stopPropagation();
+    clearCatalogSearch();
+  }
 });
 
 function fmtSize(b) {
