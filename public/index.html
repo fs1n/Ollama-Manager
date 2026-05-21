@@ -84,6 +84,18 @@ header {
 .status-dot.connected { background: var(--success); box-shadow: 0 0 6px var(--success); }
 .status-dot.error { background: var(--danger); }
 
+.version-badge {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  padding: 2px 8px;
+  background: var(--bg3);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  letter-spacing: 0.02em;
+}
+
 /* Nav */
 nav {
   grid-area: nav;
@@ -435,6 +447,28 @@ tr:hover td { background: var(--bg3); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Typing indicator */
+.typing-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 0;
+}
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text3);
+  animation: typingBounce 1.4s ease-in-out infinite both;
+}
+.typing-dot:nth-child(1) { animation-delay: -0.32s; }
+.typing-dot:nth-child(2) { animation-delay: -0.16s; }
+.typing-dot:nth-child(3) { animation-delay: 0s; }
+@keyframes typingBounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; background: var(--accent); }
+}
+
 /* Empty state */
 .empty {
   text-align: center;
@@ -754,6 +788,7 @@ tr:hover td { background: var(--bg3); }
     <div class="status-dot" id="status-dot"></div>
     <span id="status-text">disconnected</span>
   </div>
+  <span class="version-badge" id="version-badge"></span>
   <button class="btn btn-sm" id="logout-btn" onclick="doLogout()" style="display:none;margin-left:auto">
     <i class="ti ti-logout" aria-hidden="true"></i> Logout
   </button>
@@ -1087,6 +1122,8 @@ let modelCache = [];
 let pullAbort = null;
 let genAbort = null;
 
+const TYPING_INDICATOR_HTML = '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
+
 async function fetchModels() {
   const r = await api('/api/tags');
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -1101,7 +1138,7 @@ function api(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...customHeaders };
   if (token) headers['X-Session-Token'] = token;
   return fetch(path, { headers, ...rest }).then(r => {
-    if (r.status === 401) {
+    if (r.status === 401 && authRequired) {
       sessionStorage.removeItem('sessionToken');
       document.getElementById('login-overlay').classList.add('open');
     }
@@ -1146,12 +1183,20 @@ function activatePage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + name));
 }
 
+let modelsPromise = null;
+
+async function ensureModels() {
+  if (modelCache.length) return;
+  if (!modelsPromise) modelsPromise = fetchModels().catch(() => {});
+  await modelsPromise;
+}
+
 const pageLoaders = {
   models: loadModels,
   running: loadRunning,
-  chat: populateModelSelects,
-  generate: populateModelSelects,
-  embeddings: populateModelSelects,
+  chat: async () => { await ensureModels(); populateModelSelects(); },
+  generate: async () => { await ensureModels(); populateModelSelects(); },
+  embeddings: async () => { await ensureModels(); populateModelSelects(); },
   catalog: () => { refreshRunning(); if (!catalogData.length) loadCatalog(); }
 };
 
@@ -1191,12 +1236,15 @@ async function checkSession() {
   try {
     const r = await api('/api/session');
     const d = await r.json();
-    if (d.authRequired) {
-      document.getElementById('logout-btn').style.display = 'inline-flex';
-    }
-    if (d.authRequired && !d.authenticated) {
+    authRequired = d.authRequired;
+    document.getElementById('logout-btn').style.display = authRequired ? 'inline-flex' : 'none';
+    if (authRequired && !d.authenticated) {
       document.getElementById('login-overlay').classList.add('open');
       return;
+    }
+    if (!authRequired) {
+      sessionStorage.removeItem('sessionToken');
+      document.getElementById('login-overlay').classList.remove('open');
     }
   } catch(e) {
     toast('Session check failed', 'error');
@@ -1226,6 +1274,18 @@ async function doLogout() {
   await api('/api/logout', { method: 'POST' });
   sessionStorage.removeItem('sessionToken');
   location.reload();
+}
+
+async function loadAppVersion() {
+  try {
+    const r = await fetch('/api/app-version');
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.version) {
+      const el = document.getElementById('version-badge');
+      el.textContent = d.version === 'dev' ? 'dev' : 'v' + d.version;
+    }
+  } catch(_) {}
 }
 
 async function connect() {
@@ -1482,7 +1542,7 @@ async function sendChat() {
   // Assistant placeholder
   const aDiv = document.createElement('div');
   aDiv.className = 'msg assistant';
-  aDiv.innerHTML = `<div class="msg-avatar"><i class="ti ti-robot" aria-hidden="true"></i></div><div class="msg-content"><span class="spinner"></span></div>`;
+  aDiv.innerHTML = '<div class="msg-avatar"><i class="ti ti-robot" aria-hidden="true"></i></div><div class="msg-content">' + TYPING_INDICATOR_HTML + '</div>';
   msgBox.appendChild(aDiv);
   const contentEl = aDiv.querySelector('.msg-content');
   msgBox.scrollTop = msgBox.scrollHeight;
@@ -1614,6 +1674,7 @@ let catalogData = [];
 let catCapFilter = 'all';
 let catView = 'all';
 let runningNames = new Set();
+let authRequired = false;
 
 async function loadCatalog() {
   const wrap = document.getElementById('catalog-wrap');
@@ -1860,6 +1921,7 @@ pageLoaders[startPage]?.();
 
 checkSession();
 connect();
+loadAppVersion();
 </script>
 </body>
 </html>

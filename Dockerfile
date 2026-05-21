@@ -1,5 +1,8 @@
 FROM oven/bun:1-alpine
 
+ARG BUILD_VERSION=dev
+ENV OLLAMA_MANAGER_VERSION=${BUILD_VERSION}
+
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /app

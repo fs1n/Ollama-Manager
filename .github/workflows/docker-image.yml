@@ -31,6 +31,8 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
+          build-args: |
+            BUILD_VERSION=\${{ steps.tag.outputs.VERSION }}
           tags: |
             ghcr.io/${{ github.repository_owner }}/ollama-manager:latest
             ghcr.io/${{ github.repository_owner }}/ollama-manager:${{ steps.tag.outputs.VERSION }}

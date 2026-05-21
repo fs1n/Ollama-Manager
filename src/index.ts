@@ -1,10 +1,20 @@
 import { timingSafeEqual } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 const MASTER_KEY = (process.env.MASTER_KEY || "").trim();
 const OLLAMA_HOST = (process.env.OLLAMA_HOST || "http://localhost:11434").replace(/\/$/, "");
 const OLLAMA_URL = new URL(OLLAMA_HOST);
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const SESSION_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+const VERSION = process.env.OLLAMA_MANAGER_VERSION || (() => {
+  try {
+    const pkg = JSON.parse(readFileSync("./package.json", "utf-8"));
+    return pkg.version || "dev";
+  } catch {
+    return "dev";
+  }
+})();
 
 const sessions = new Map<string, number>();
 
@@ -171,6 +181,11 @@ Bun.serve({
       const token = req.headers.get("x-session-token") || "";
       if (token) sessions.delete(token);
       return Response.json({ ok: true });
+    }
+
+    // App version (public)
+    if (url.pathname === "/api/app-version") {
+      return Response.json({ version: VERSION });
     }
 
     // Health (public — needed for Docker HEALTHCHECK)
