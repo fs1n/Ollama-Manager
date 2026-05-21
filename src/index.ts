@@ -53,6 +53,10 @@ async function forwardToOllama(req: Request): Promise<Response> {
   const headers = new Headers(req.headers);
   headers.delete("host");
   headers.set("host", OLLAMA_URL.host);
+  // Strip browser-originated headers — the manager is the HTTP client to Ollama,
+  // and Ollama's OLLAMA_ORIGINS check would reject a non-localhost Origin.
+  headers.delete("origin");
+  headers.delete("referer");
 
   try {
     const resp = await fetch(target, {
