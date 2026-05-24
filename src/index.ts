@@ -289,6 +289,259 @@ if (LITELLM_ENABLED && LITELLM_SYNC_INTERVAL > 0) {
   }, LITELLM_SYNC_INTERVAL * 60_000);
 }
 
+const OPENAPI_SPEC = {
+  openapi: "3.0.3",
+  info: {
+    title: "Ollama Manager API",
+    description:
+      "Lightweight web UI for managing Ollama. All `/api/*` paths not listed below are transparently proxied to the configured Ollama instance.",
+    version: VERSION,
+  },
+  components: {
+    securitySchemes: {
+      sessionToken: {
+        type: "apiKey",
+        in: "header",
+        name: "x-session-token",
+        description: "Session token returned by POST /api/auth",
+      },
+    },
+  },
+  security: [{ sessionToken: [] }],
+  paths: {
+    "/api/session": {
+      get: {
+        summary: "Session status",
+        tags: ["Auth"],
+        security: [],
+        responses: {
+          200: {
+            description: "Auth configuration and current session state",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    authRequired: { type: "boolean" },
+                    authenticated: { type: "boolean" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/auth": {
+      post: {
+        summary: "Authenticate",
+        tags: ["Auth"],
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: { key: { type: "string" } },
+                required: ["key"],
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: "Authentication token",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    token: { type: "string" },
+                    expires: { type: "number" },
+                  },
+                },
+              },
+            },
+          },
+          401: { description: "Invalid master key" },
+        },
+      },
+    },
+    "/api/logout": {
+      post: {
+        summary: "Invalidate session token",
+        tags: ["Auth"],
+        security: [],
+        responses: {
+          200: {
+            description: "Logged out",
+            content: {
+              "application/json": {
+                schema: { type: "object", properties: { ok: { type: "boolean" } } },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/app-version": {
+      get: {
+        summary: "App version",
+        tags: ["Meta"],
+        security: [],
+        responses: {
+          200: {
+            description: "Version string",
+            content: {
+              "application/json": {
+                schema: { type: "object", properties: { version: { type: "string" } } },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/catalog/library": {
+      get: {
+        summary: "Registry catalog",
+        description: "Scraped list of models from ollama.com/library.",
+        tags: ["Catalog"],
+        responses: {
+          200: {
+            description: "Model list",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    models: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          name: { type: "string" },
+                          description: { type: "string" },
+                          capabilities: { type: "array", items: { type: "string" } },
+                          sizes: { type: "array", items: { type: "string" } },
+                        },
+                      },
+                    },
+                    cached: { type: "boolean" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/litellm/status": {
+      get: {
+        summary: "LiteLLM sync status",
+        tags: ["LiteLLM"],
+        responses: {
+          200: {
+            description: "Sync configuration and last run",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    enabled: { type: "boolean" },
+                    url: { type: "string" },
+                    interval: { type: "number" },
+                    inProgress: { type: "boolean" },
+                    lastSync: {
+                      type: "object",
+                      nullable: true,
+                      properties: {
+                        time: { type: "number" },
+                        success: { type: "number" },
+                        failed: { type: "number" },
+                        skipped: { type: "number" },
+                        details: {
+                          type: "array",
+                          items: {
+                            type: "object",
+                            properties: {
+                              status: {
+                                type: "string",
+                                enum: ["success", "skipped", "failed", "info"],
+                              },
+                              message: { type: "string" },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/litellm/sync": {
+      post: {
+        summary: "Trigger LiteLLM sync",
+        description: "Registers all Ollama models with the configured LiteLLM proxy.",
+        tags: ["LiteLLM"],
+        responses: {
+          200: {
+            description: "Full status after sync",
+            content: { "application/json": { schema: { type: "object" } } },
+          },
+          400: { description: "LiteLLM sync not configured" },
+        },
+      },
+    },
+    "/health": {
+      get: {
+        summary: "Health check",
+        tags: ["Meta"],
+        security: [],
+        responses: {
+          200: {
+            description: "Service health",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: { status: { type: "string", example: "ok" } },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
+const SWAGGER_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Ollama Manager API Docs</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.32.6/swagger-ui.css">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f0f0f'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23c8f060' stroke-width='2.5'/%3E%3Crect x='14.5' y='10' width='3' height='12' fill='%23c8f060' transform='rotate(25 16 16)'/%3E%3C/svg%3E">
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5.32.6/swagger-ui-bundle.js"></script>
+  <script>
+    SwaggerUIBundle({
+      url: '/api/openapi.json',
+      dom_id: '#swagger-ui',
+      deepLinking: true,
+      presets: [SwaggerUIBundle.presets.apis]
+    });
+  </script>
+</body>
+</html>`;
+
 Bun.serve({
   port: PORT,
   hostname: "0.0.0.0",
@@ -336,6 +589,18 @@ Bun.serve({
     if (url.pathname === "/health") {
       return new Response(JSON.stringify({ status: "ok" }), {
         headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // OpenAPI spec (public)
+    if (url.pathname === "/api/openapi.json") {
+      return Response.json(OPENAPI_SPEC);
+    }
+
+    // Swagger UI (public)
+    if (url.pathname === "/api/docs") {
+      return new Response(SWAGGER_HTML, {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
       });
     }
 

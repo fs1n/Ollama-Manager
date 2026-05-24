@@ -102,6 +102,13 @@ nav {
   background: var(--bg2);
   border-right: 1px solid var(--border);
   padding: 16px 0;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  min-height: 0;
+}
+.nav-scroll {
+  overflow-y: auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -688,6 +695,15 @@ tr:hover td { background: var(--bg3); }
     scrollbar-width: none;
   }
   nav::-webkit-scrollbar { display: none; }
+  .nav-scroll {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 2px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .nav-scroll::-webkit-scrollbar { display: none; }
   .nav-section { display: none; }
   .nav-item {
     flex-shrink: 0;
@@ -761,6 +777,7 @@ tr:hover td { background: var(--bg3); }
 .login-btn { width: 100%; }
 .login-error { color: var(--danger); font-size: 12px; text-align: center; margin-top: 12px; display: none; }
 
+.nav-footer:hover { color: var(--text); }
 .search-wrap { position: relative; }
 .search-clear {
   position: absolute;
@@ -817,44 +834,50 @@ tr:hover td { background: var(--bg3); }
 </header>
 
 <nav>
-  <div class="nav-section">Overview</div>
-  <div class="nav-item active" data-page="dashboard" tabindex="0" role="button">
-    <i class="ti ti-layout-dashboard" aria-hidden="true"></i> Dashboard
+  <div class="nav-scroll">
+    <div class="nav-section">Overview</div>
+    <div class="nav-item active" data-page="dashboard" tabindex="0" role="button">
+      <i class="ti ti-layout-dashboard" aria-hidden="true"></i> Dashboard
+    </div>
+
+    <div class="nav-section">Models</div>
+    <div class="nav-item" data-page="models" tabindex="0" role="button">
+      <i class="ti ti-box" aria-hidden="true"></i> Local models
+    </div>
+    <div class="nav-item" data-page="running" tabindex="0" role="button">
+      <i class="ti ti-player-play" aria-hidden="true"></i> Running
+    </div>
+    <div class="nav-item" data-page="pull" tabindex="0" role="button">
+      <i class="ti ti-download" aria-hidden="true"></i> Pull model
+    </div>
+    <div class="nav-item" data-page="copy" tabindex="0" role="button">
+      <i class="ti ti-copy" aria-hidden="true"></i> Copy / push
+    </div>
+
+    <div class="nav-item" data-page="catalog" tabindex="0" role="button">
+      <i class="ti ti-world" aria-hidden="true"></i> Registry catalog
+    </div>
+
+    <div class="nav-section">Test</div>
+    <div class="nav-item" data-page="chat" tabindex="0" role="button">
+      <i class="ti ti-messages" aria-hidden="true"></i> Chat
+    </div>
+    <div class="nav-item" data-page="generate" tabindex="0" role="button">
+      <i class="ti ti-wand" aria-hidden="true"></i> Generate
+    </div>
+    <div class="nav-item" data-page="embeddings" tabindex="0" role="button">
+      <i class="ti ti-vector" aria-hidden="true"></i> Embeddings
+    </div>
+
+    <div class="nav-section">Integrations</div>
+    <div class="nav-item" data-page="litellm" tabindex="0" role="button">
+      <i class="ti ti-refresh" aria-hidden="true"></i> LiteLLM Sync
+    </div>
   </div>
 
-  <div class="nav-section">Models</div>
-  <div class="nav-item" data-page="models" tabindex="0" role="button">
-    <i class="ti ti-box" aria-hidden="true"></i> Local models
-  </div>
-  <div class="nav-item" data-page="running" tabindex="0" role="button">
-    <i class="ti ti-player-play" aria-hidden="true"></i> Running
-  </div>
-  <div class="nav-item" data-page="pull" tabindex="0" role="button">
-    <i class="ti ti-download" aria-hidden="true"></i> Pull model
-  </div>
-  <div class="nav-item" data-page="copy" tabindex="0" role="button">
-    <i class="ti ti-copy" aria-hidden="true"></i> Copy / push
-  </div>
-
-  <div class="nav-item" data-page="catalog" tabindex="0" role="button">
-    <i class="ti ti-world" aria-hidden="true"></i> Registry catalog
-  </div>
-
-  <div class="nav-section">Test</div>
-  <div class="nav-item" data-page="chat" tabindex="0" role="button">
-    <i class="ti ti-messages" aria-hidden="true"></i> Chat
-  </div>
-  <div class="nav-item" data-page="generate" tabindex="0" role="button">
-    <i class="ti ti-wand" aria-hidden="true"></i> Generate
-  </div>
-  <div class="nav-item" data-page="embeddings" tabindex="0" role="button">
-    <i class="ti ti-vector" aria-hidden="true"></i> Embeddings
-  </div>
-
-  <div class="nav-section">Integrations</div>
-  <div class="nav-item" data-page="litellm" tabindex="0" role="button">
-    <i class="ti ti-refresh" aria-hidden="true"></i> LiteLLM Sync
-  </div>
+  <a href="/api/docs" target="_blank" rel="noopener" class="nav-footer" style="padding:12px 20px;font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px;text-decoration:none;border-top:1px solid var(--border);transition:color 0.15s;flex-shrink:0">
+    <i class="ti ti-book" aria-hidden="true"></i> API Docs
+  </a>
 </nav>
 
 <main>
