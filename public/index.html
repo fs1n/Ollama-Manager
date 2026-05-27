@@ -1270,7 +1270,7 @@ tr:hover td { background: var(--bg3); }
   <div class="modal">
     <div class="modal-title">
       <span id="modal-title-text">Model details</span>
-      <button class="btn btn-sm" onclick="document.getElementById('modal-overlay').classList.remove('open')">
+      <button class="btn btn-sm" onclick="document.getElementById('modal-overlay').classList.remove('open'); if (modalTrigger) { modalTrigger.focus(); modalTrigger = null; }">
         <i class="ti ti-x" aria-hidden="true"></i>
       </button>
     </div>
@@ -2227,11 +2227,30 @@ function showCatalogDetail(name) {
 }
 
 function closeModal(e) {
-  if (e.target.id === 'modal-overlay') document.getElementById('modal-overlay').classList.remove('open');
+  if (e.target.id === 'modal-overlay') {
+    document.getElementById('modal-overlay').classList.remove('open');
+    if (modalTrigger) { modalTrigger.focus(); modalTrigger = null; }
+  }
 }
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') document.getElementById('modal-overlay').classList.remove('open');
+  if (e.key === 'Escape') {
+    const overlay = document.getElementById('modal-overlay');
+    if (overlay.classList.contains('open')) {
+      overlay.classList.remove('open');
+      if (modalTrigger) { modalTrigger.focus(); modalTrigger = null; }
+    }
+  }
+});
+
+document.getElementById('modal-overlay').addEventListener('keydown', function(e) {
+  if (e.key !== 'Tab') return;
+  const focusable = Array.from(this.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'));
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
 });
 
 document.getElementById('catalog-search').addEventListener('keydown', e => {
@@ -2290,7 +2309,10 @@ function baseName(n) { return n.split(':')[0]; }
 function renderCaps(caps) { return (caps || []).map(c => `<span class="cap-badge cap-${c}">${c}</span>`).join(''); }
 function renderSizes(sizes) { return (sizes || []).map(s => `<span class="size-badge">${s}</span>`).join(''); }
 
+let modalTrigger = null;
+
 function openModal(title, content, { rich = false, focus = false } = {}) {
+  modalTrigger = document.activeElement;
   const body = document.getElementById('modal-body');
   body.classList.toggle('rich', rich);
   if (rich) body.innerHTML = content;
@@ -2298,7 +2320,10 @@ function openModal(title, content, { rich = false, focus = false } = {}) {
   document.getElementById('modal-title-text').textContent = title;
   const overlay = document.getElementById('modal-overlay');
   overlay.classList.add('open');
-  if (focus) overlay.querySelector('.btn')?.focus();
+  if (focus) {
+    const firstFocusable = overlay.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    firstFocusable?.focus();
+  }
 }
 
 // Event delegation: sidebar navigation
