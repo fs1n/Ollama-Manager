@@ -2383,6 +2383,10 @@ document.getElementById('login-key').addEventListener('keydown', e => {
   if (e.key === 'Enter') doLogin();
 });
 
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted) checkSession();
+});
+
 (async () => {
   const startPage = document.querySelector(`.nav-item[data-page="${location.hash.slice(1)}"]`) ? location.hash.slice(1) : 'dashboard';
   activatePage(startPage);

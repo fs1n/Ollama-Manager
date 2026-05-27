@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
+import path from "node:path";
 
 const MASTER_KEY = (process.env.MASTER_KEY || "").trim();
 const OLLAMA_HOST = (process.env.OLLAMA_HOST || "http://localhost:11434").replace(/\/$/, "");
@@ -12,7 +13,7 @@ const LITELLM_KEY = (process.env.LITELLM_KEY || "").trim();
 const LITELLM_SYNC_INTERVAL = parseInt(process.env.LITELLM_SYNC_INTERVAL || "30", 10);
 const LITELLM_ENABLED = !!(LITELLM_URL && LITELLM_KEY);
 
-const STATIC_HTML = readFileSync("./public/index.html", "utf-8");
+const STATIC_HTML = readFileSync(path.join(import.meta.dir, "..", "public", "index.html"), "utf-8");
 
 const VERSION =
   process.env.OLLAMA_MANAGER_VERSION ||
@@ -42,7 +43,7 @@ setInterval(() => {
 type LogLevel = "info" | "warn" | "error";
 
 function log(level: LogLevel, msg: string, meta?: Record<string, unknown>): void {
-  console.log(JSON.stringify({ ts: new Date().toISOString(), level, msg, ...meta }));
+  console.log(JSON.stringify({ ts: new Date().toISOString(), level, msg, meta }));
 }
 
 function jsonError(message: string, status = 502): Response {
@@ -122,7 +123,7 @@ async function forwardToOllama(req: Request): Promise<Response> {
     });
   } catch (err: unknown) {
     const name = (err as { name?: string })?.name;
-    if (name === "AbortError") throw err;
+    if (name === "AbortError") return new Response(null, { status: 499 });
     if (name === "TimeoutError") return jsonError("Upstream request timed out", 504);
     return jsonError("Ollama unreachable");
   }
@@ -601,17 +602,23 @@ Bun.serve({
     // Session status (public)
     if (url.pathname === "/api/session" && req.method === "GET") {
       const token = req.headers.get("x-session-token") || "";
-      return Response.json({
-        authRequired: !!MASTER_KEY,
-        authenticated: MASTER_KEY ? isSessionValid(token) : true,
-      });
+      return Response.json(
+        {
+          authRequired: !!MASTER_KEY,
+          authenticated: MASTER_KEY ? isSessionValid(token) : true,
+        },
+        { headers: { "Cache-Control": "no-store" } },
+      );
     }
 
     // Login (public)
     if (url.pathname === "/api/auth" && req.method === "POST") {
       return (async () => {
-        const clientIp = server.requestIP(req)?.address ?? "unknown";
-        if (isRateLimited(clientIp)) return jsonError("Too many attempts, try again later", 429);
+        const forwarded = req.headers.get("x-forwarded-for");
+        const clientIp =
+          forwarded?.split(",")[0]?.trim() ?? server.requestIP(req)?.address ?? "unknown";
+        if (clientIp !== "unknown" && isRateLimited(clientIp))
+          return jsonError("Too many attempts, try again later", 429);
         try {
           const { key } = await req.json();
           if (!key || !MASTER_KEY) return jsonError("Unauthorized", 401);
@@ -653,8 +660,9 @@ Bun.serve({
           ollamaStatus = "connected";
           ollamaVersion = d.version ?? null;
         }
-      } catch {
-        /* upstream down — still report manager as healthy */
+      } catch (e: unknown) {
+        const reason = e instanceof Error ? e.message : String(e);
+        log("warn", "Health check upstream probe failed", { error: reason });
       }
       return Response.json({ status: "ok", ollama: ollamaStatus, ollamaVersion });
     }
@@ -673,7 +681,9 @@ Bun.serve({
 
     // Static files (public — frontend handles login UI)
     if (url.pathname === "/" || !url.pathname.startsWith("/api/")) {
-      return new Response(STATIC_HTML, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+      return new Response(STATIC_HTML, {
+        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+      });
     }
 
     // Auth gate (API only)
