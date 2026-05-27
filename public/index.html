@@ -490,6 +490,17 @@ tr:hover td { background: var(--bg3); }
   40% { transform: scale(1); opacity: 1; background: var(--accent); }
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.page.active {
+  animation: fadeIn 140ms ease both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .page.active { animation: none; }
+}
+
 /* Empty state */
 .empty {
   text-align: center;
@@ -525,6 +536,19 @@ tr:hover td { background: var(--bg3); }
 .toast.error { border-left: 3px solid var(--danger); }
 .toast.info { border-left: 3px solid var(--info); }
 @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+.toast-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 0 0 8px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.toast-close:hover { color: var(--text); }
 
 /* Catalog */
 .catalog-grid {
@@ -1358,12 +1382,19 @@ function showConfirm(title, message, okLabel = 'Confirm') {
 }
 
 function toast(msg, type = 'info') {
+  const container = document.getElementById('toast-container');
+  // Remove oldest if already at 4
+  while (container.children.length >= 4) container.firstChild.remove();
+
   const el = document.createElement('div');
   el.className = `toast ${type}`;
   const icons = { success: 'ti-check', error: 'ti-alert-circle', info: 'ti-info-circle' };
-  el.innerHTML = `<i class="ti ${icons[type]}" aria-hidden="true"></i> ${escHtml(msg)}`;
-  document.getElementById('toast-container').appendChild(el);
-  setTimeout(() => el.remove(), 3500);
+  el.innerHTML = `<i class="ti ${icons[type] || 'ti-info-circle'}" aria-hidden="true"></i> ${escHtml(msg)}<button class="toast-close" aria-label="Dismiss">&times;</button>`;
+  el.querySelector('.toast-close').onclick = () => el.remove();
+  container.appendChild(el);
+
+  const timeout = type === 'error' ? 7000 : 3500;
+  setTimeout(() => el.remove(), timeout);
 }
 
 function setStatus(ok, version) {
