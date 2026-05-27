@@ -1215,7 +1215,7 @@ tr:hover td { background: var(--bg3); }
         <option value="13">Medium (≤13B)</option>
         <option value="70">Large (≤70B)</option>
       </select>
-      <button class="btn btn-sm" id="catalog-sort" onclick="toggleCatalogSort()" title="Sort A–Z"><i class="ti ti-sort-ascending" aria-hidden="true"></i></button>
+      <button class="btn btn-sm" id="catalog-sort" onclick="toggleCatalogSort()" title="Sort A–Z" aria-label="Sort models"><i class="ti ti-sort-ascending" aria-hidden="true"></i></button>
       <button class="btn" onclick="loadCatalog()"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
     </div>
   </div>
@@ -1270,7 +1270,7 @@ tr:hover td { background: var(--bg3); }
   <div class="modal">
     <div class="modal-title">
       <span id="modal-title-text">Model details</span>
-      <button class="btn btn-sm" onclick="document.getElementById('modal-overlay').classList.remove('open'); if (modalTrigger) { modalTrigger.focus(); modalTrigger = null; }">
+      <button class="btn btn-sm" onclick="document.getElementById('modal-overlay').classList.remove('open'); if (modalTrigger) { modalTrigger.focus(); modalTrigger = null; }" aria-label="Close dialog">
         <i class="ti ti-x" aria-hidden="true"></i>
       </button>
     </div>
