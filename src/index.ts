@@ -553,7 +553,11 @@ const OPENAPI_SPEC = {
               "application/json": {
                 schema: {
                   type: "object",
-                  properties: { status: { type: "string", example: "ok" } },
+                  properties: {
+                    status: { type: "string", example: "ok" },
+                    ollama: { type: "string", enum: ["connected", "unreachable"] },
+                    ollamaVersion: { type: "string", nullable: true },
+                  },
                 },
               },
             },
@@ -636,10 +640,21 @@ Bun.serve({
     }
 
     // Health (public — needed for Docker HEALTHCHECK)
+    // Manager always returns 200 (it's running); ollama field shows upstream state.
     if (url.pathname === "/health") {
-      return new Response(JSON.stringify({ status: "ok" }), {
-        headers: { "Content-Type": "application/json" },
-      });
+      let ollamaStatus = "unreachable";
+      let ollamaVersion: string | null = null;
+      try {
+        const r = await fetch(`${OLLAMA_HOST}/api/version`, { signal: AbortSignal.timeout(2_000) });
+        if (r.ok) {
+          const d = (await r.json()) as { version?: string };
+          ollamaStatus = "connected";
+          ollamaVersion = d.version ?? null;
+        }
+      } catch {
+        /* upstream down — still report manager as healthy */
+      }
+      return Response.json({ status: "ok", ollama: ollamaStatus, ollamaVersion });
     }
 
     // OpenAPI spec (public)
