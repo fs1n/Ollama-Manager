@@ -1825,6 +1825,7 @@ async function sendChat() {
     }
 
     chatHistory.push({ role: 'assistant', content: full });
+    renderMarkdown(contentEl);
   } catch(e) {
     // Roll back user message on failure (except for partial-success aborts)
     if (e.name === 'AbortError') {
@@ -1847,6 +1848,33 @@ async function sendChat() {
     sendBtn.classList.add('btn-primary');
     sendBtn.classList.remove('btn-danger');
   }
+}
+
+function renderMarkdown(el) {
+  // Escape HTML entities first so we don't re-process
+  const temp = document.createElement('div');
+  temp.textContent = el.textContent;
+  let text = temp.textContent;
+
+  // Code blocks
+  text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    return `\n\n[CODEBLOCK lang="${escAttr(lang || 'text')}"]\n${code.trim()}\n[/CODEBLOCK]\n\n`;
+  });
+
+  // Inline code
+  text = text.replace(/`([^`]+)`/g, '<code style="background:var(--bg4);padding:1px 4px;border-radius:3px;font-family:var(--mono);font-size:12px;color:var(--accent)">$1</code>');
+
+  // Convert code blocks back
+  text = text.replace(/\[CODEBLOCK lang="([^"]*)"\]\n([\s\S]*?)\n\[\/CODEBLOCK\]/g, (_, lang, code) => {
+    return `<pre style="background:var(--bg4);border:1px solid var(--border);border-radius:var(--radius);padding:10px;font-family:var(--mono);font-size:12px;color:var(--text);overflow-x:auto;margin:8px 0"><code style="background:transparent;padding:0;border-radius:0">${escHtml(code)}</code></pre>`;
+  });
+
+  // Bold
+  text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  // Italic
+  text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+  el.innerHTML = text;
 }
 
 async function doGenerate() {
