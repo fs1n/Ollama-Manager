@@ -329,7 +329,9 @@ function getLiteLLMStatus() {
 // Scheduler
 if (LITELLM_ENABLED && LITELLM_SYNC_INTERVAL > 0) {
   setInterval(() => {
-    syncOllamaToLiteLLM().catch(() => {});
+    syncOllamaToLiteLLM().catch((e: Error) =>
+      log("error", "LiteLLM scheduled sync failed", { error: e.message }),
+    );
   }, LITELLM_SYNC_INTERVAL * 60_000);
 }
 
