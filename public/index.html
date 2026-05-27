@@ -1215,6 +1215,20 @@ tr:hover td { background: var(--bg3); }
   </div>
 </div>
 
+<!-- Confirm dialog -->
+<div class="modal-overlay" id="confirm-overlay" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-title">
+      <span id="confirm-title">Confirm</span>
+    </div>
+    <p id="confirm-message" style="font-size:13px;color:var(--text2);margin-bottom:20px;line-height:1.6"></p>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn" id="confirm-cancel-btn">Cancel</button>
+      <button class="btn btn-danger" id="confirm-ok-btn">Delete</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
 
 <script>
@@ -1317,6 +1331,31 @@ window.addEventListener('hashchange', () => {
   activatePage(page);
   pageLoaders[page]?.();
 });
+
+function showConfirm(title, message, okLabel = 'Confirm') {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('confirm-overlay');
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-message').textContent = message;
+    document.getElementById('confirm-ok-btn').textContent = okLabel;
+    overlay.classList.add('open');
+
+    function cleanup(result) {
+      overlay.classList.remove('open');
+      overlay.removeEventListener('click', onBackdrop);
+      document.removeEventListener('keydown', onKey);
+      resolve(result);
+    }
+    function onBackdrop(e) { if (e.target === overlay) cleanup(false); }
+    function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); cleanup(false); } }
+
+    document.getElementById('confirm-ok-btn').onclick = () => cleanup(true);
+    document.getElementById('confirm-cancel-btn').onclick = () => cleanup(false);
+    overlay.addEventListener('click', onBackdrop);
+    document.addEventListener('keydown', onKey);
+    document.getElementById('confirm-cancel-btn').focus();
+  });
+}
 
 function toast(msg, type = 'info') {
   const el = document.createElement('div');
@@ -1490,7 +1529,8 @@ async function showModel(name) {
 }
 
 async function deleteModel(name) {
-  if (!confirm(`Delete model "${name}"?`)) return;
+  const ok = await showConfirm('Delete model', `Delete "${name}"? This cannot be undone.`, 'Delete');
+  if (!ok) return;
   document.querySelectorAll('[data-action="delete"]').forEach(b => b.disabled = true);
   try {
     const r = await api('/api/delete', { method: 'DELETE', body: JSON.stringify({ model: name }) });
@@ -1498,6 +1538,7 @@ async function deleteModel(name) {
     toast(`Deleted ${name}`, 'success');
     loadModels();
   } catch(e) { toast('Delete failed', 'error'); }
+  finally { document.querySelectorAll('[data-action="delete"]').forEach(b => b.disabled = false); }
 }
 
 async function pullModel() {
