@@ -117,9 +117,11 @@ async function forwardToOllama(req: Request): Promise<Response> {
       signal,
     });
 
+    const proxyHeaders = new Headers(resp.headers);
+    proxyHeaders.set("Cache-Control", "no-store");
     return new Response(resp.body, {
       status: resp.status,
-      headers: resp.headers,
+      headers: proxyHeaders,
     });
   } catch (err: unknown) {
     const name = (err as { name?: string })?.name;
@@ -134,65 +136,154 @@ interface LibraryModel {
   description: string;
   capabilities: string[];
   sizes: string[];
+  isCloud?: boolean;
 }
 
 let libraryCache: LibraryModel[] | null = null;
 let libraryCacheTime = 0;
 const LIBRARY_TTL = 3600_000;
 let libraryInflight: Promise<LibraryModel[]> | null = null;
+let cloudTagCache: Set<string> | null = null;
+let cloudTagCacheTime = 0;
+const CLOUD_TAG_TTL = 3600_000;
+
+async function fetchCloudTags(): Promise<Set<string>> {
+  if (cloudTagCache && Date.now() - cloudTagCacheTime < CLOUD_TAG_TTL) {
+    return cloudTagCache;
+  }
+  try {
+    const resp = await fetch("https://ollama.com/api/tags", {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = (await resp.json()) as { models?: { name?: string }[] };
+    const names = new Set<string>();
+    for (const m of data.models || []) {
+      if (m.name) names.add(m.name.split(":")[0]);
+    }
+    cloudTagCache = names;
+    cloudTagCacheTime = Date.now();
+    log("info", "Fetched cloud tags", { count: names.size });
+    return names;
+  } catch (err) {
+    log("warn", "Failed to fetch cloud tags", { error: String(err) });
+    return cloudTagCache ?? new Set<string>();
+  }
+}
+
+async function _scrapeLibrary(): Promise<LibraryModel[]> {
+  const maxRetries = 3;
+  let lastErr: unknown;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    if (attempt > 0) {
+      const delay = 1000 * 2 ** (attempt - 1);
+      log("info", "Library scrape retry", { attempt: attempt + 1, delay });
+      await new Promise((r) => setTimeout(r, delay));
+    }
+
+    try {
+      const resp = await fetch("https://ollama.com/library", {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+      const html = await resp.text();
+      const models: LibraryModel[] = [];
+      const cards = html.split("<li x-test-model");
+
+      for (let i = 1; i < cards.length; i++) {
+        const card = cards[i];
+
+        const nameMatch =
+          card.match(/href="\/library\/([^"]+)"/) ??
+          card.match(/data-testid="model-card"[^>]*data-name="([^"]+)"/) ??
+          card.match(/<h[23][^>]*>\s*<a[^>]*href="\/library\/([^"]+)"/);
+
+        const descMatch =
+          card.match(/<p[^>]*class="[^"]*text-neutral-800[^"]*"[^>]*>([^<]+)<\/p>/) ??
+          card.match(/<p[^>]*class="[^"]*text-gray-600[^"]*"[^>]*>([^<]+)<\/p>/) ??
+          card.match(/<p[^>]*class="[^"]*line-clamp-2[^"]*"[^>]*>([^<]+)<\/p>/);
+
+        const caps: string[] = [];
+        const sizes: string[] = [];
+
+        for (const m of card.matchAll(/x-test-capability[^>]*>([^<]+)<\//g)) caps.push(m[1].trim());
+        if (caps.length === 0) {
+          for (const m of card.matchAll(/data-testid="capability"[^>]*>([^<]+)<\//g))
+            caps.push(m[1].trim());
+        }
+
+        for (const m of card.matchAll(/x-test-size[^>]*>([^<]+)<\//g)) sizes.push(m[1].trim());
+        if (sizes.length === 0) {
+          for (const m of card.matchAll(/data-testid="size"[^>]*>([^<]+)<\//g))
+            sizes.push(m[1].trim());
+          for (const m of card.matchAll(/data-tag="size"[^>]*>([^<]+)<\//g))
+            sizes.push(m[1].trim());
+        }
+
+        if (nameMatch) {
+          models.push({
+            name: nameMatch[1],
+            description: descMatch?.[1] || "",
+            capabilities: caps,
+            sizes,
+          });
+        }
+      }
+
+      libraryCache = models;
+      libraryCacheTime = Date.now();
+      log("info", "Library scraped", { count: models.length });
+      return models;
+    } catch (err) {
+      lastErr = err;
+      log("warn", "Library scrape attempt failed", { attempt: attempt + 1, error: String(err) });
+    }
+  }
+
+  if (libraryCache) {
+    log("warn", "Library scrape failed, returning stale cache", {
+      ageMs: Date.now() - libraryCacheTime,
+      error: String(lastErr),
+    });
+    return libraryCache;
+  }
+
+  throw lastErr;
+}
 
 async function fetchLibrary(): Promise<LibraryModel[]> {
   if (libraryCache && Date.now() - libraryCacheTime < LIBRARY_TTL) {
     return libraryCache;
   }
   if (libraryInflight) return libraryInflight;
-  libraryInflight = _scrapeLibrary().finally(() => {
+  libraryInflight = (async () => {
+    const [cloudNames, models] = await Promise.all([fetchCloudTags(), _scrapeLibrary()]);
+    for (const m of models) {
+      m.isCloud = cloudNames.has(m.name);
+    }
+    return models;
+  })().finally(() => {
     libraryInflight = null;
   });
   return libraryInflight;
 }
 
-async function _scrapeLibrary(): Promise<LibraryModel[]> {
-  const resp = await fetch("https://ollama.com/library", {
-    headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
-  const html = await resp.text();
-  const models: LibraryModel[] = [];
-  const cards = html.split("<li x-test-model");
-
-  for (let i = 1; i < cards.length; i++) {
-    const card = cards[i];
-    const nameMatch = card.match(/href="\/library\/([^"]+)"/);
-    const descMatch = card.match(/<p[^>]*class="[^"]*text-neutral-800[^"]*"[^>]*>([^<]+)<\/p>/);
-    const caps: string[] = [];
-    const sizes: string[] = [];
-
-    for (const m of card.matchAll(/x-test-capability[^>]*>([^<]+)<\//g)) caps.push(m[1].trim());
-    for (const m of card.matchAll(/x-test-size[^>]*>([^<]+)<\//g)) sizes.push(m[1].trim());
-
-    if (nameMatch) {
-      models.push({
-        name: nameMatch[1],
-        description: descMatch?.[1] || "",
-        capabilities: caps,
-        sizes,
-      });
-    }
-  }
-
-  libraryCache = models;
-  libraryCacheTime = Date.now();
-  return models;
-}
-
 async function serveLibrary(): Promise<Response> {
   try {
     const models = await fetchLibrary();
-    return Response.json({ models, cached: Date.now() - libraryCacheTime < 5000 });
-  } catch {
+    const isFresh = Date.now() - libraryCacheTime < 5000;
+    const isStale = !isFresh && libraryCacheTime > 0 && Date.now() - libraryCacheTime > LIBRARY_TTL;
+    return Response.json({ models, cached: isFresh, stale: isStale });
+  } catch (err) {
+    log("error", "Failed to serve library catalog", { error: String(err) });
     return jsonError("Failed to fetch library catalog");
   }
 }
@@ -245,7 +336,9 @@ async function syncOllamaToLiteLLM(): Promise<SyncResult> {
         .catch(() => null),
     ]);
 
-    const ollamaModels: string[] = (ollamaData.models || []).map((m: any) => m.name as string);
+    const ollamaModels: string[] = (ollamaData.models || [])
+      .map((m: { name?: string }) => m.name || "")
+      .filter(Boolean);
 
     if (ollamaModels.length === 0) {
       result.details.push({ status: "info", message: "No models found in Ollama" });
@@ -253,7 +346,7 @@ async function syncOllamaToLiteLLM(): Promise<SyncResult> {
     }
 
     const existingModels = new Set<string>(
-      (llmData?.data || []).map((m: any) => m.id).filter(Boolean),
+      (llmData?.data || []).map((m: { id?: string }) => m.id).filter(Boolean),
     );
 
     for (const name of ollamaModels) {
@@ -290,18 +383,18 @@ async function syncOllamaToLiteLLM(): Promise<SyncResult> {
             message: `${name}: HTTP ${resp.status} — ${err.slice(0, 100)}`,
           });
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
         result.failed++;
         result.details.push({
           status: "failed",
-          message: `${name}: ${e.message || "Network error"}`,
+          message: `${name}: ${e instanceof Error ? e.message : "Network error"}`,
         });
       }
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     result.details.push({
       status: "failed",
-      message: `Sync error: ${e.message || "Unknown error"}`,
+      message: `Sync error: ${e instanceof Error ? e.message : "Unknown error"}`,
     });
   } finally {
     syncInProgress = false;
@@ -714,7 +807,7 @@ Bun.serve({
     return forwardToOllama(req);
   },
   error() {
-    return new Response("Internal Server Error", { status: 500 });
+    return jsonError("Internal Server Error", 500);
   },
 });
 

@@ -1259,7 +1259,6 @@ tr:hover td { background: var(--bg3); }
         <i class="ti ti-refresh" aria-hidden="true"></i> Sync Now
       </button>
     </div>
-    <div id="litellm-log" class="pull-log" style="display:none"></div>
   </div>
 </div>
 
@@ -1314,7 +1313,7 @@ function api(path, opts = {}) {
   const { headers: customHeaders, ...rest } = opts;
   const token = sessionStorage.getItem('sessionToken');
   const headers = { 'Content-Type': 'application/json', ...customHeaders };
-  if (token) headers['X-Session-Token'] = token;
+  if (token) headers['x-session-token'] = token;
   return fetch(path, { headers, ...rest }).then(r => {
     if (r.status === 401 && authRequired) {
       sessionStorage.removeItem('sessionToken');
@@ -1331,6 +1330,7 @@ function debouncedFilterCatalog() {
 }
 
 async function* readNdjsonLines(response) {
+  if (!response.body) return;
   const reader = response.body.getReader();
   const dec = new TextDecoder();
   let buffer = '';
@@ -1370,6 +1370,7 @@ async function ensureModels() {
 }
 
 const pageLoaders = {
+  dashboard: loadDashboard,
   models: loadModels,
   running: loadRunning,
   chat: async () => { await ensureModels(); populateModelSelects(); },
@@ -1407,15 +1408,26 @@ function showConfirm(title, message, okLabel = 'Confirm') {
       overlay.classList.remove('open');
       overlay.removeEventListener('click', onBackdrop);
       document.removeEventListener('keydown', onKey);
+      overlay.removeEventListener('keydown', onTrap);
       resolve(result);
     }
     function onBackdrop(e) { if (e.target === overlay) cleanup(false); }
     function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); cleanup(false); } }
+    function onTrap(e) {
+      if (e.key !== 'Tab') return;
+      const focusable = Array.from(overlay.querySelectorAll('button:not([disabled])'));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
 
     document.getElementById('confirm-ok-btn').onclick = () => cleanup(true);
     document.getElementById('confirm-cancel-btn').onclick = () => cleanup(false);
     overlay.addEventListener('click', onBackdrop);
     document.addEventListener('keydown', onKey);
+    overlay.addEventListener('keydown', onTrap);
     document.getElementById('confirm-cancel-btn').focus();
   });
 }
@@ -1577,7 +1589,7 @@ async function loadRunning() {
   try {
     const models = await refreshRunning();
     if (models.length === 0) {
-      wrap.innerHTML = '<div class="empty"><i class="ti ti-player-pause" aria-hidden="true"></i>No models currently loaded.<br><button class="btn" style="margin-top:12px" onclick="activatePage(\'models\');location.hash=\'models\'"><i class="ti ti-box" aria-hidden="true"></i> View local models</button></div>';
+      wrap.innerHTML = '<div class="empty"><i class="ti ti-player-pause" aria-hidden="true"></i>No models currently running</div>';
       return;
     }
     wrap.innerHTML = `<div class="table-wrap"><table>
@@ -2021,22 +2033,19 @@ async function loadLiteLLMStatus() {
 
 async function triggerLiteLLMSync() {
   const btn = document.getElementById('litellm-sync-btn');
-  const logDiv = document.getElementById('litellm-log');
   const statusDiv = document.getElementById('litellm-status');
   const actionsDiv = document.getElementById('litellm-actions');
   btn.disabled = true;
-  logDiv.style.display = 'block';
-  logDiv.innerHTML = '<span class="log-line">Syncing models…</span>';
+  statusDiv.innerHTML = `<div style="margin-bottom:8px;font-size:12px;color:var(--text3)">Syncing models…</div><div class="empty"><span class="spinner"></span></div>`;
   try {
     const r = await api('/api/litellm/sync', { method: 'POST' });
     if (!r.ok) throw new Error(await httpErrorDetail(r));
     const d = await r.json();
     const result = d.lastSync;
-    logDiv.innerHTML = result.details.map(l => `<span class="log-line ${syncLogClass(l.status)}">${escHtml(l.message)}</span>`).join('');
     toast(`LiteLLM sync complete — ${result.success} success, ${result.failed} failed, ${result.skipped} skipped`, result.failed > 0 ? 'warning' : 'success');
     renderLiteLLMStatus(statusDiv, actionsDiv, d);
   } catch(e) {
-    logDiv.innerHTML = `<span class="log-line err">Sync failed: ${escHtml(e.message)}</span>`;
+    statusDiv.innerHTML = `<div class="empty"><i class="ti ti-alert-circle" aria-hidden="true"></i>Sync failed: ${escHtml(e.message)}</div>`;
     toast('LiteLLM sync failed', 'error');
   } finally {
     btn.disabled = false;
@@ -2164,12 +2173,12 @@ function showTagPicker(name) {
   const sizes = m.sizes || [];
   const hasThinking = m.capabilities?.includes('thinking');
   const hasVision = m.capabilities?.includes('vision');
-  const isCloud = sizes.length === 0 && (hasThinking || hasVision);
-  const tags = isCloud
-    ? ['cloud']
-    : sizes.length > 0
-      ? ['latest', ...sizes.filter(s => s !== 'latest')]
-      : ['latest', 'cloud'];
+  const isCloud = m.isCloud || (sizes.length === 0 && (hasThinking || hasVision));
+  const tags = sizes.length > 0
+    ? ['latest', ...sizes.filter(s => s !== 'latest'), ...(isCloud ? ['cloud'] : [])]
+    : isCloud
+      ? ['cloud']
+      : ['latest'];
   const installedNames = new Set(modelCache.map(x => x.name));
 
   const content =
