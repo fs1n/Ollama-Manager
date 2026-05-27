@@ -960,6 +960,10 @@ tr:hover td { background: var(--bg3); }
       <div class="info-label">Running now</div>
       <div class="info-value" id="dash-running-count">—</div>
     </div>
+    <div class="info-item">
+      <div class="info-label">Total disk</div>
+      <div class="info-value" id="dash-disk">—</div>
+    </div>
   </div>
   <div class="card">
     <div class="card-header">
@@ -1503,6 +1507,8 @@ async function loadDashboard() {
     modelCache = modD.models || [];
     const running = runD.models || [];
     runningNames = new Set(running.map(m => m.name));
+    const totalDisk = modelCache.reduce((sum, m) => sum + (m.size || 0), 0);
+    document.getElementById('dash-disk').textContent = fmtSize(totalDisk);
     document.getElementById('dash-model-count').textContent = modelCache.length;
     document.getElementById('dash-running-count').textContent = running.length;
     const runList = document.getElementById('dash-running-list');
