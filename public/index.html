@@ -1575,8 +1575,58 @@ async function showModel(name) {
       body: JSON.stringify({ model: name })
     });
     const d = await r.json();
-    openModal(name, JSON.stringify(d, null, 2), { focus: true });
+    const info = formatModelInfo(d);
+    openModal(name, info, { rich: true, focus: true });
   } catch(e) { toast('Failed to load model info', 'error'); }
+}
+
+function formatModelInfo(d) {
+  const details = d.details || {};
+  const params = d.parameters || '';
+  const license = d.license || '';
+  const modelfile = d.modelfile || '';
+  const family = details.family || details.families?.[0] || '—';
+  const quant = details.quantization_level || '—';
+  const pSize = details.parameter_size || '—';
+  const ctx = details.context_length || '—';
+
+  let html = `<div style="font-family:var(--sans);font-size:13px;line-height:1.7;color:var(--text)">`;
+
+  // Header badges
+  html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">`;
+  html += `<span class="badge" style="background:rgba(200,240,96,0.1);color:var(--accent);border-color:rgba(200,240,96,0.25)">${escHtml(family)}</span>`;
+  html += `<span class="badge">${escHtml(quant)}</span>`;
+  html += `<span class="badge">${escHtml(pSize)}</span>`;
+  html += `</div>`;
+
+  // Meta grid
+  html += `<div class="info-grid" style="margin-bottom:16px">`;
+  html += `<div class="info-item"><div class="info-label">Size</div><div class="info-value">${fmtSize(d.size)}</div></div>`;
+  html += `<div class="info-item"><div class="info-label">Context</div><div class="info-value">${escHtml(String(ctx))}</div></div>`;
+  html += `<div class="info-item"><div class="info-label">Modified</div><div class="info-value">${d.modified_at ? new Date(d.modified_at).toLocaleString() : '—'}</div></div>`;
+  html += `</div>`;
+
+  // System prompt
+  const sysMatch = modelfile.match(/SYSTEM\s+"""([\s\S]*?)"""/);
+  if (sysMatch) {
+    html += `<div style="margin-bottom:12px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">System Prompt</div>`;
+    html += `<pre style="max-height:160px;overflow:auto;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px;font-size:11px;color:var(--text2)">${escHtml(sysMatch[1].trim())}</pre></div>`;
+  }
+
+  // Parameters
+  if (params) {
+    html += `<div style="margin-bottom:12px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Parameters</div>`;
+    html += `<pre style="max-height:120px;overflow:auto;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px;font-size:11px;color:var(--text2)">${escHtml(params)}</pre></div>`;
+  }
+
+  // License
+  if (license) {
+    html += `<div><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">License</div>`;
+    html += `<pre style="max-height:80px;overflow:auto;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px;font-size:11px;color:var(--text2)">${escHtml(license)}</pre></div>`;
+  }
+
+  html += `</div>`;
+  return html;
 }
 
 async function deleteModel(name) {
