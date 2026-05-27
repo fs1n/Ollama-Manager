@@ -129,14 +129,23 @@ interface LibraryModel {
 let libraryCache: LibraryModel[] | null = null;
 let libraryCacheTime = 0;
 const LIBRARY_TTL = 3600_000;
+let libraryInflight: Promise<LibraryModel[]> | null = null;
 
 async function fetchLibrary(): Promise<LibraryModel[]> {
   if (libraryCache && Date.now() - libraryCacheTime < LIBRARY_TTL) {
     return libraryCache;
   }
+  if (libraryInflight) return libraryInflight;
+  libraryInflight = _scrapeLibrary().finally(() => {
+    libraryInflight = null;
+  });
+  return libraryInflight;
+}
 
+async function _scrapeLibrary(): Promise<LibraryModel[]> {
   const resp = await fetch("https://ollama.com/library", {
     headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
+    signal: AbortSignal.timeout(10_000),
   });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
