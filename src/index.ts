@@ -24,12 +24,16 @@ const VERSION =
   })();
 
 const sessions = new Map<string, number>();
+const authFailures = new Map<string, { count: number; resetAt: number }>();
 
-// Periodic cleanup of expired sessions (every hour)
+// Periodic cleanup of expired sessions and rate-limit entries (every hour)
 setInterval(() => {
   const now = Date.now();
   for (const [token, expiry] of sessions) {
     if (now > expiry) sessions.delete(token);
+  }
+  for (const [ip, entry] of authFailures) {
+    if (now > entry.resetAt) authFailures.delete(ip);
   }
 }, 3600_000);
 
@@ -67,6 +71,22 @@ function timingSafeCompare(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);
   const bBuf = Buffer.from(b);
   return timingSafeEqual(aBuf, bBuf);
+}
+
+function isRateLimited(ip: string): boolean {
+  const entry = authFailures.get(ip);
+  if (!entry) return false;
+  if (Date.now() > entry.resetAt) {
+    authFailures.delete(ip);
+    return false;
+  }
+  return entry.count >= 5;
+}
+
+function recordAuthFailure(ip: string): void {
+  const entry = authFailures.get(ip) ?? { count: 0, resetAt: Date.now() + 60_000 };
+  entry.count++;
+  authFailures.set(ip, entry);
 }
 
 async function forwardToOllama(req: Request): Promise<Response> {
@@ -551,7 +571,7 @@ const SWAGGER_HTML = `<!DOCTYPE html>
 Bun.serve({
   port: PORT,
   hostname: "0.0.0.0",
-  async fetch(req) {
+  async fetch(req, server) {
     const url = new URL(req.url);
 
     // Session status (public)
@@ -566,10 +586,16 @@ Bun.serve({
     // Login (public)
     if (url.pathname === "/api/auth" && req.method === "POST") {
       return (async () => {
+        const clientIp = server.requestIP(req)?.address ?? "unknown";
+        if (isRateLimited(clientIp)) return jsonError("Too many attempts, try again later", 429);
         try {
           const { key } = await req.json();
           if (!key || !MASTER_KEY) return jsonError("Unauthorized", 401);
-          if (!timingSafeCompare(key, MASTER_KEY)) return jsonError("Unauthorized", 401);
+          if (!timingSafeCompare(key, MASTER_KEY)) {
+            recordAuthFailure(clientIp);
+            return jsonError("Unauthorized", 401);
+          }
+          authFailures.delete(clientIp);
           const token = generateToken();
           sessions.set(token, Date.now() + SESSION_TTL);
           return Response.json({ token, expires: sessions.get(token) });
