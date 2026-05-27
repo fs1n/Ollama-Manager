@@ -1540,11 +1540,12 @@ async function loadModels() {
       <div class="model-card">
         <div class="model-name">
           <span>${escHtml(m.name)}</span>
+          ${m.details?.parameter_size ? `<span style="color:var(--accent);font-size:11px">${escHtml(m.details.parameter_size)}</span>` : ''}
         </div>
         <div class="model-meta">
+          ${m.details?.quantization_level ? `<span class="badge" style="background:rgba(200,240,96,0.08);color:var(--accent);border-color:rgba(200,240,96,0.2)">${escHtml(m.details.quantization_level)}</span>` : ''}
           <span class="badge">${fmtSize(m.size)}</span>
           <span class="badge">${escHtml(m.details?.parameter_size || '')}</span>
-          <span class="badge">${escHtml(m.details?.quantization_level || '')}</span>
         </div>
         <div class="model-actions">
           <button class="btn btn-sm" data-action="info" data-model="${escAttr(m.name)}"><i class="ti ti-info-circle" aria-hidden="true"></i> Info</button>
