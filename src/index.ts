@@ -12,6 +12,8 @@ const LITELLM_KEY = (process.env.LITELLM_KEY || "").trim();
 const LITELLM_SYNC_INTERVAL = parseInt(process.env.LITELLM_SYNC_INTERVAL || "30", 10);
 const LITELLM_ENABLED = !!(LITELLM_URL && LITELLM_KEY);
 
+const STATIC_HTML = readFileSync("./public/index.html", "utf-8");
+
 const VERSION =
   process.env.OLLAMA_MANAGER_VERSION ||
   (() => {
@@ -654,7 +656,7 @@ Bun.serve({
 
     // Static files (public — frontend handles login UI)
     if (url.pathname === "/" || !url.pathname.startsWith("/api/")) {
-      return new Response(Bun.file("./public/index.html"));
+      return new Response(STATIC_HTML, { headers: { "Content-Type": "text/html; charset=utf-8" } });
     }
 
     // Auth gate (API only)
