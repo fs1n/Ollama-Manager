@@ -1568,7 +1568,9 @@ async function loadRunning() {
       <tbody>${models.map(m => `<tr>
         <td>${escHtml(m.name)}</td>
         <td>${fmtSize(m.size)}</td>
-        <td>${fmtSize(m.size_vram)}</td>
+        <td>${fmtSize(m.size_vram)}
+          ${m.size && m.size_vram ? `<div class="progress-wrap" style="margin-top:4px;height:4px"><div class="progress-bar" style="width:${Math.min(100, Math.round((m.size_vram / m.size) * 100))}%"></div></div>` : ''}
+        </td>
         <td style="font-family:var(--mono);font-size:11px">${m.expires_at ? new Date(m.expires_at).toLocaleTimeString() : '—'}</td>
       </tr>`).join('')}</tbody>
     </table></div>`;
