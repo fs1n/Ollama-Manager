@@ -44,6 +44,21 @@ body {
   grid-template-areas: "header header" "nav main";
 }
 
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--accent);
+  color: #0f0f0f;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 10000;
+  transition: top 0.15s;
+  border-radius: 0 0 var(--radius) 0;
+}
+.skip-link:focus { top: 0; }
+
 /* Header */
 header {
   grid-area: header;
@@ -858,6 +873,7 @@ tr:hover td { background: var(--bg3); }
 </style>
 </head>
 <body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
 
 <div id="login-overlay">
   <div class="login-box">
@@ -936,7 +952,7 @@ tr:hover td { background: var(--bg3); }
   </a>
 </nav>
 
-<main>
+<main id="main-content">
 
 <!-- DASHBOARD -->
 <div class="page active" id="page-dashboard">
