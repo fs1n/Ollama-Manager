@@ -89,6 +89,8 @@ function recordAuthFailure(ip: string): void {
   authFailures.set(ip, entry);
 }
 
+const PROXY_TIMEOUT_MS = 600_000; // 10 min hard limit — generous for large model pulls
+
 async function forwardToOllama(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const target = `${OLLAMA_HOST}${url.pathname}${url.search}`;
@@ -101,20 +103,25 @@ async function forwardToOllama(req: Request): Promise<Response> {
   headers.delete("origin");
   headers.delete("referer");
 
+  const deadline = AbortSignal.timeout(PROXY_TIMEOUT_MS);
+  const signal = req.signal ? AbortSignal.any([req.signal, deadline]) : deadline;
+
   try {
     const resp = await fetch(target, {
       method: req.method,
       headers,
       body: req.body,
-      signal: req.signal,
+      signal,
     });
 
     return new Response(resp.body, {
       status: resp.status,
       headers: resp.headers,
     });
-  } catch (err: any) {
-    if (err?.name === "AbortError") throw err;
+  } catch (err: unknown) {
+    const name = (err as { name?: string })?.name;
+    if (name === "AbortError") throw err;
+    if (name === "TimeoutError") return jsonError("Upstream request timed out", 504);
     return jsonError("Ollama unreachable");
   }
 }
