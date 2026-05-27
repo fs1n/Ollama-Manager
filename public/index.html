@@ -321,6 +321,24 @@ label {
 
 .model-actions { display: flex; gap: 8px; }
 
+/* Skeleton */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton-line {
+  background: linear-gradient(90deg, var(--bg3) 25%, var(--bg4) 50%, var(--bg3) 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: 4px;
+}
+.skeleton-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
 /* Table */
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -1503,9 +1521,10 @@ async function loadDashboard() {
 }
 
 async function loadModels() {
+  const wrap = document.getElementById('model-grid-wrap');
+  wrap.innerHTML = skeletonModelCards(6);
   try {
     const models = await fetchModels();
-    const wrap = document.getElementById('model-grid-wrap');
     if (models.length === 0) {
       wrap.innerHTML = '<div class="empty"><i class="ti ti-box" aria-hidden="true"></i>No models found. Pull one first.</div>';
       return;
@@ -1529,9 +1548,10 @@ async function loadModels() {
 }
 
 async function loadRunning() {
+  const wrap = document.getElementById('running-wrap');
+  wrap.innerHTML = skeletonTableRows(3);
   try {
     const models = await refreshRunning();
-    const wrap = document.getElementById('running-wrap');
     if (models.length === 0) {
       wrap.innerHTML = '<div class="empty"><i class="ti ti-player-pause" aria-hidden="true"></i>No models currently loaded</div>';
       return;
@@ -2131,6 +2151,34 @@ function escHtml(s) {
 function escAttr(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
           .replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+}
+
+function skeletonModelCards(n = 6) {
+  return `<div class="model-grid">${Array.from({length: n}, () => `
+    <div class="skeleton-card">
+      <div class="skeleton-line" style="height:14px;width:60%;margin-bottom:12px"></div>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <div class="skeleton-line" style="height:20px;width:55px"></div>
+        <div class="skeleton-line" style="height:20px;width:40px"></div>
+        <div class="skeleton-line" style="height:20px;width:48px"></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <div class="skeleton-line" style="height:28px;flex:1"></div>
+        <div class="skeleton-line" style="height:28px;flex:1"></div>
+      </div>
+    </div>`).join('')}</div>`;
+}
+
+function skeletonTableRows(n = 3) {
+  return `<div class="table-wrap"><table>
+    <thead><tr><th>Model</th><th>Size</th><th>VRAM</th><th>Expires</th></tr></thead>
+    <tbody>${Array.from({length: n}, () => `<tr>
+      <td><div class="skeleton-line" style="height:12px;width:140px"></div></td>
+      <td><div class="skeleton-line" style="height:12px;width:60px"></div></td>
+      <td><div class="skeleton-line" style="height:12px;width:60px"></div></td>
+      <td><div class="skeleton-line" style="height:12px;width:80px"></div></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
 }
 
 function baseName(n) { return n.split(':')[0]; }
