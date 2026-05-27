@@ -33,6 +33,12 @@ setInterval(() => {
   }
 }, 3600_000);
 
+type LogLevel = "info" | "warn" | "error";
+
+function log(level: LogLevel, msg: string, meta?: Record<string, unknown>): void {
+  console.log(JSON.stringify({ ts: new Date().toISOString(), level, msg, ...meta }));
+}
+
 function jsonError(message: string, status = 502): Response {
   return new Response(JSON.stringify({ error: message }), {
     status,
@@ -641,11 +647,12 @@ Bun.serve({
   },
 });
 
-console.log(`Ollama Manager → http://0.0.0.0:${PORT}`);
-if (MASTER_KEY) {
-  console.log("Master key authentication enabled");
-}
-console.log(`Configured Ollama endpoint → ${OLLAMA_HOST}`);
+log("info", "Ollama Manager started", {
+  port: PORT,
+  ollama: OLLAMA_HOST,
+  auth: !!MASTER_KEY,
+  litellm: LITELLM_ENABLED,
+});
 if (LITELLM_ENABLED) {
-  console.log(`LiteLLM sync enabled → ${LITELLM_URL} (every ${LITELLM_SYNC_INTERVAL} min)`);
+  log("info", "LiteLLM sync enabled", { url: LITELLM_URL, intervalMin: LITELLM_SYNC_INTERVAL });
 }
