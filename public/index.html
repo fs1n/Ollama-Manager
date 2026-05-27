@@ -1078,7 +1078,7 @@ tr:hover td { background: var(--bg3); }
       </div>
     </div>
     <div class="chat-messages" id="chat-messages">
-      <div class="empty" style="margin:auto"><i class="ti ti-messages" aria-hidden="true"></i>Start a conversation</div>
+      <div class="empty" style="margin:auto"><i class="ti ti-messages" aria-hidden="true"></i>Start a conversation<br><span style="font-size:12px;color:var(--text3)">Select a model above to begin</span></div>
     </div>
     <div class="chat-input-row">
       <textarea id="chat-input" placeholder="Type a message… (Enter to send, Shift+Enter for newline)" rows="2"></textarea>
@@ -1526,7 +1526,7 @@ async function loadModels() {
   try {
     const models = await fetchModels();
     if (models.length === 0) {
-      wrap.innerHTML = '<div class="empty"><i class="ti ti-box" aria-hidden="true"></i>No models found. Pull one first.</div>';
+      wrap.innerHTML = '<div class="empty"><i class="ti ti-box" aria-hidden="true"></i>No models found.<br><button class="btn btn-primary" style="margin-top:12px" onclick="activatePage(\'pull\');location.hash=\'pull\'"><i class="ti ti-download" aria-hidden="true"></i> Pull your first model</button></div>';
       return;
     }
     wrap.innerHTML = `<div class="model-grid">${models.map(m => `
@@ -1553,7 +1553,7 @@ async function loadRunning() {
   try {
     const models = await refreshRunning();
     if (models.length === 0) {
-      wrap.innerHTML = '<div class="empty"><i class="ti ti-player-pause" aria-hidden="true"></i>No models currently loaded</div>';
+      wrap.innerHTML = '<div class="empty"><i class="ti ti-player-pause" aria-hidden="true"></i>No models currently loaded.<br><button class="btn" style="margin-top:12px" onclick="activatePage(\'models\');location.hash=\'models\'"><i class="ti ti-box" aria-hidden="true"></i> View local models</button></div>';
       return;
     }
     wrap.innerHTML = `<div class="table-wrap"><table>
@@ -1736,7 +1736,7 @@ function clearChat() {
   chatHistory = [];
   chatSystemSnapshot = '';
   document.getElementById('chat-messages').innerHTML =
-    '<div class="empty" style="margin:auto"><i class="ti ti-messages" aria-hidden="true"></i>Start a conversation</div>';
+    '<div class="empty" style="margin:auto"><i class="ti ti-messages" aria-hidden="true"></i>Start a conversation<br><span style="font-size:12px;color:var(--text3)">Select a model above to begin</span></div>';
 }
 
 document.getElementById('chat-input').addEventListener('keydown', function(e) {
