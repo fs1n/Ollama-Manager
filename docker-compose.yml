@@ -8,11 +8,7 @@ services:
       - OLLAMA_HOST=http://host.docker.internal:11434
       # Optional: require master key to access the UI
       # - MASTER_KEY=your-secret-key-here
-<<<<<<< Updated upstream
-      # Optional: integrate with LiteLLM for model syncing and management
-=======
       # Optional: connect to LiteLLM instance for model syncing
->>>>>>> Stashed changes
       # - LITELLM_URL=http://litellm:4000
       # - LITELLM_KEY=your-secret-key-here
-      # - LITELLM_SYNC_INTERVAL=30   # Minuten, 0 = auto-sync aus
+      # - LITELLM_SYNC_INTERVAL=30   # minutes, 0 = disable auto-sync

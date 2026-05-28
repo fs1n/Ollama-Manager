@@ -156,6 +156,7 @@ async function fetchCloudTags(): Promise<Set<string>> {
       headers: {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
       },
+      credentials: "omit",
       signal: AbortSignal.timeout(10_000),
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -190,6 +191,7 @@ async function _scrapeLibrary(): Promise<LibraryModel[]> {
         headers: {
           "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
         },
+        credentials: "omit",
         signal: AbortSignal.timeout(10_000),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
