@@ -71,4 +71,4 @@ Requires Ollama running at `OLLAMA_HOST` (defaults to `http://localhost:11434`).
 
 ## License
 
-MIT
+[MIT](https://github.com/fs1n/Ollama-Manager/blob/main/LICENSE)
