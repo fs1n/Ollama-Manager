@@ -33,10 +33,11 @@ const ENTITY_MAP: Record<string, string> = {
   "&gt;": ">",
   "&nbsp;": " ",
 };
+const NAMED_ENTITY_RE = new RegExp(Object.keys(ENTITY_MAP).join("|"), "g");
 
 export function decodeHtmlEntities(s: string): string {
   return s
-    .replace(/&#39;|&apos;|&quot;|&amp;|&lt;|&gt;|&nbsp;/g, (m) => ENTITY_MAP[m] ?? m)
+    .replace(NAMED_ENTITY_RE, (m) => ENTITY_MAP[m] ?? m)
     .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(parseInt(code, 10)))
     .trim();
 }

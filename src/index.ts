@@ -112,6 +112,19 @@ const PROXY_CONNECT_TIMEOUT_MS = 600_000; // hard cap to receive the initial res
 // slow-but-still-progressing pull well before it finishes.
 const PROXY_IDLE_TIMEOUT_MS = 120_000;
 
+// Ollama endpoints whose responses stream long-lived NDJSON bodies. Only these
+// get the idle-timeout body wrapper below — everything else returns a small
+// JSON body right after the headers, and wrapping it would put a JS-land
+// stream pump (reader, closures, timer churn) on the dashboard's hot polling
+// path (/api/tags, /api/ps) for no benefit.
+const STREAMING_API_PATHS = new Set([
+  "/api/pull",
+  "/api/push",
+  "/api/chat",
+  "/api/generate",
+  "/api/create",
+]);
+
 // Wraps an upstream body so it self-terminates after PROXY_IDLE_TIMEOUT_MS with no
 // new chunk, resetting the timer on every chunk received. onIdleTimeout() is used
 // to also abort the underlying upstream fetch so Ollama isn't left mid-request.
@@ -123,20 +136,22 @@ function withIdleTimeout(
   if (!body) return null;
   const reader = body.getReader();
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let fireIdle = () => {}; // bound to the real controller in start()
 
   const disarm = () => {
     if (timer) clearTimeout(timer);
   };
-  const arm = (fire: () => void) => {
-    timer = setTimeout(fire, idleMs);
+  const arm = () => {
+    timer = setTimeout(fireIdle, idleMs);
   };
 
   return new ReadableStream<Uint8Array>({
     start(controller) {
-      arm(() => {
+      fireIdle = () => {
         onIdleTimeout();
         controller.error(new Error("Idle timeout — no data received from Ollama"));
-      });
+      };
+      arm();
     },
     async pull(controller) {
       try {
@@ -147,10 +162,7 @@ function withIdleTimeout(
           return;
         }
         controller.enqueue(value);
-        arm(() => {
-          onIdleTimeout();
-          controller.error(new Error("Idle timeout — no data received from Ollama"));
-        });
+        arm();
       } catch (err) {
         disarm();
         controller.error(err);
@@ -195,7 +207,9 @@ async function forwardToOllama(req: Request): Promise<Response> {
 
     const proxyHeaders = new Headers(resp.headers);
     proxyHeaders.set("Cache-Control", "no-store");
-    const body = withIdleTimeout(resp.body, PROXY_IDLE_TIMEOUT_MS, () => upstreamAbort.abort());
+    const body = STREAMING_API_PATHS.has(url.pathname)
+      ? withIdleTimeout(resp.body, PROXY_IDLE_TIMEOUT_MS, () => upstreamAbort.abort())
+      : resp.body;
     return new Response(body, {
       status: resp.status,
       headers: proxyHeaders,

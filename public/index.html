@@ -1306,8 +1306,7 @@ let genAbort = null;
 const TYPING_INDICATOR_HTML = '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
 
 async function fetchModels() {
-  const r = await api('/api/tags');
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const r = await apiOk('/api/tags');
   const d = await r.json();
   modelCache = d.models || [];
   return modelCache;
@@ -1358,6 +1357,16 @@ async function httpErrorDetail(r) {
   let detail = '';
   try { detail = (await r.json()).error || ''; } catch(_) {}
   return `HTTP ${r.status}${detail ? ' — ' + detail : ''}`;
+}
+
+// api() that throws on any non-2xx response, with the server's error detail in
+// the message. Use this everywhere a non-ok response should land in the
+// caller's catch block; use plain api() only where non-ok is handled specially
+// (e.g. pushModel reads the body either way, refreshRunning degrades quietly).
+async function apiOk(path, opts) {
+  const r = await api(path, opts);
+  if (!r.ok) throw new Error(await httpErrorDetail(r));
+  return r;
 }
 
 function activatePage(name) {
@@ -1526,8 +1535,7 @@ let lastKnownConnected = null;
 
 async function connect() {
   try {
-    const r = await api('/api/version');
-    if (!r.ok) throw new Error(await httpErrorDetail(r));
+    const r = await apiOk('/api/version');
     const d = await r.json();
     const version = d.version || 'unknown';
     setStatus(true, version);
@@ -1546,9 +1554,7 @@ async function connect() {
 
 async function loadDashboard() {
   try {
-    const [modR, runR] = await Promise.all([api('/api/tags'), api('/api/ps')]);
-    if (!modR.ok) throw new Error(await httpErrorDetail(modR));
-    if (!runR.ok) throw new Error(await httpErrorDetail(runR));
+    const [modR, runR] = await Promise.all([apiOk('/api/tags'), apiOk('/api/ps')]);
     const modD = await modR.json();
     const runD = await runR.json();
     modelCache = modD.models || [];
@@ -1691,8 +1697,7 @@ async function deleteModel(name) {
   if (!ok) return;
   document.querySelectorAll('[data-action="delete"]').forEach(b => b.disabled = true);
   try {
-    const r = await api('/api/delete', { method: 'DELETE', body: JSON.stringify({ model: name }) });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    await apiOk('/api/delete', { method: 'DELETE', body: JSON.stringify({ model: name }) });
     toast(`Deleted ${name}`, 'success');
     loadModels();
   } catch(e) { toast('Delete failed', 'error'); }
@@ -1720,8 +1725,7 @@ async function pullModel() {
   pullBtn.classList.remove('btn-primary');
 
   try {
-    const r = await api('/api/pull', { method: 'POST', body: JSON.stringify({ model, stream: true }), signal: pullAbort.signal });
-    if (!r.ok) throw new Error(await httpErrorDetail(r));
+    const r = await apiOk('/api/pull', { method: 'POST', body: JSON.stringify({ model, stream: true }), signal: pullAbort.signal });
 
     // Ollama streams one "pulling <digest>" sequence per layer, each with its
     // own completed/total byte counts. Track them per digest and sum, so the
@@ -1771,8 +1775,7 @@ async function copyModel() {
   if (!src || !dst) return toast('Fill in both fields', 'error');
   copying = true;
   try {
-    const r = await api('/api/copy', { method: 'POST', body: JSON.stringify({ source: src, destination: dst }) });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    await apiOk('/api/copy', { method: 'POST', body: JSON.stringify({ source: src, destination: dst }) });
     toast(`Copied ${src} → ${dst}`, 'success');
   } catch(e) { toast('Copy failed', 'error'); }
   finally { copying = false; }
@@ -1882,13 +1885,11 @@ async function sendChat() {
   let full = '';
 
   try {
-    const r = await api('/api/chat', {
+    const r = await apiOk('/api/chat', {
       method: 'POST',
       body: JSON.stringify({ model, messages: chatHistory, stream: true }),
       signal: chatAbort.signal
     });
-
-    if (!r.ok) throw new Error(await httpErrorDetail(r));
 
     let firstChunk = true;
 
@@ -2004,8 +2005,7 @@ async function doGenerate() {
     const body = { model, prompt, stream: true };
     if (system) body.system = system;
     if (format) body.format = format;
-    const r = await api('/api/generate', { method: 'POST', body: JSON.stringify(body), signal: genAbort.signal });
-    if (!r.ok) throw new Error(await httpErrorDetail(r));
+    const r = await apiOk('/api/generate', { method: 'POST', body: JSON.stringify(body), signal: genAbort.signal });
     for await (const ev of readNdjsonLines(r)) {
       if (ev.response) out.appendChild(document.createTextNode(ev.response));
     }
@@ -2026,11 +2026,10 @@ async function doEmbed() {
   const input = raw.split('\n').map(l => l.trim()).filter(Boolean);
   const truncate = document.getElementById('embed-truncate').value === 'true';
   try {
-    const r = await api('/api/embed', {
+    const r = await apiOk('/api/embed', {
       method: 'POST',
       body: JSON.stringify({ model, input, truncate })
     });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
     const vecs = d.embeddings || [];
     const statsDiv = document.getElementById('embed-stats');
@@ -2080,7 +2079,7 @@ async function loadLiteLLMStatus() {
   const statusDiv = document.getElementById('litellm-status');
   const actionsDiv = document.getElementById('litellm-actions');
   try {
-    const r = await api('/api/litellm/status');
+    const r = await apiOk('/api/litellm/status');
     const d = await r.json();
     renderLiteLLMStatus(statusDiv, actionsDiv, d);
   } catch(e) {
@@ -2096,8 +2095,7 @@ async function triggerLiteLLMSync() {
   btn.disabled = true;
   statusDiv.innerHTML = `<div style="margin-bottom:8px;font-size:12px;color:var(--text3)">Syncing models…</div><div class="empty"><span class="spinner"></span></div>`;
   try {
-    const r = await api('/api/litellm/sync', { method: 'POST' });
-    if (!r.ok) throw new Error(await httpErrorDetail(r));
+    const r = await apiOk('/api/litellm/sync', { method: 'POST' });
     const d = await r.json();
     const result = d.lastSync;
     toast(`LiteLLM sync complete — ${result.success} success, ${result.failed} failed, ${result.skipped} skipped`, result.failed > 0 ? 'warning' : 'success');
@@ -2162,7 +2160,7 @@ async function loadCatalog() {
   const wrap = document.getElementById('catalog-wrap');
   wrap.innerHTML = '<div class="empty"><span class="spinner"></span> Loading catalog…</div>';
   try {
-    const r = await api('/api/catalog/library');
+    const r = await apiOk('/api/catalog/library');
     const d = await r.json();
     catalogData = d.models || [];
     renderCatalog();
@@ -2472,22 +2470,16 @@ document.getElementById('catalog-wrap').addEventListener('click', e => {
   }
 });
 
-document.getElementById('login-key').addEventListener('keydown', e => {
-  if (e.key === 'Enter') doLogin();
-});
-
-document.getElementById('pull-model').addEventListener('keydown', e => {
-  if (e.key === 'Enter') pullModel();
-});
-document.getElementById('copy-src').addEventListener('keydown', e => {
-  if (e.key === 'Enter') copyModel();
-});
-document.getElementById('copy-dst').addEventListener('keydown', e => {
-  if (e.key === 'Enter') copyModel();
-});
-document.getElementById('push-model').addEventListener('keydown', e => {
-  if (e.key === 'Enter') pushModel();
-});
+function onEnter(id, fn) {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') fn();
+  });
+}
+onEnter('login-key', doLogin);
+onEnter('pull-model', pullModel);
+onEnter('copy-src', copyModel);
+onEnter('copy-dst', copyModel);
+onEnter('push-model', pushModel);
 
 window.addEventListener('pageshow', (e) => {
   if (e.persisted) checkSession();
