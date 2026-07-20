@@ -1,6 +1,13 @@
 import { timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import {
+  createSessionToken,
+  deriveSessionSecret,
+  parseCookies,
+  tokenExpiry,
+  verifySessionToken,
+} from "./auth";
 import { type LibraryModel, parseLibraryHtml } from "./library";
 
 const MASTER_KEY = (process.env.MASTER_KEY || "").trim();
@@ -36,14 +43,19 @@ const VERSION =
     }
   })();
 
-const sessions = new Map<string, number>();
+// Sessions are stateless HMAC-signed tokens (see src/auth.ts) — no session
+// store to lose on restart. The only server-side state is the revocation list
+// of logged-out tokens, kept until those tokens would have expired anyway.
+const SESSION_SECRET = MASTER_KEY ? deriveSessionSecret(MASTER_KEY) : "";
+const SESSION_COOKIE = "om_session";
+const revokedTokens = new Map<string, number>(); // token -> its expiry
 const authFailures = new Map<string, { count: number; resetAt: number }>();
 
-// Periodic cleanup of expired sessions and rate-limit entries (every hour)
+// Periodic cleanup of stale revocations and rate-limit entries (every hour)
 setInterval(() => {
   const now = Date.now();
-  for (const [token, expiry] of sessions) {
-    if (now > expiry) sessions.delete(token);
+  for (const [token, expiry] of revokedTokens) {
+    if (now > expiry) revokedTokens.delete(token);
   }
   for (const [ip, entry] of authFailures) {
     if (now > entry.resetAt) authFailures.delete(ip);
@@ -63,20 +75,34 @@ function jsonError(message: string, status = 502): Response {
   });
 }
 
-function generateToken(): string {
-  const buf = new Uint8Array(32);
-  crypto.getRandomValues(buf);
-  return Array.from(buf, (b) => b.toString(16).padStart(2, "0")).join("");
+function isSessionValid(token: string): boolean {
+  if (!token || revokedTokens.has(token)) return false;
+  return verifySessionToken(SESSION_SECRET, token);
 }
 
-function isSessionValid(token: string): boolean {
-  const expiry = sessions.get(token);
-  if (!expiry) return false;
-  if (Date.now() > expiry) {
-    sessions.delete(token);
-    return false;
-  }
-  return true;
+// The browser authenticates via an httpOnly cookie (token unreadable from JS);
+// programmatic API clients can keep sending x-session-token instead.
+function getRequestToken(req: Request): string {
+  return (
+    parseCookies(req.headers.get("cookie"))[SESSION_COOKIE] ||
+    req.headers.get("x-session-token") ||
+    ""
+  );
+}
+
+// Secure can only be set when the browser talks HTTPS to us (directly, or via
+// a trusted reverse proxy) — setting it on plain-HTTP LAN deployments would
+// make the browser drop the cookie entirely.
+function isRequestSecure(req: Request, url: URL): boolean {
+  if (url.protocol === "https:") return true;
+  return TRUST_PROXY && req.headers.get("x-forwarded-proto") === "https";
+}
+
+function sessionCookie(token: string, maxAgeSeconds: number, secure: boolean): string {
+  return (
+    `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAgeSeconds}` +
+    (secure ? "; Secure" : "")
+  );
 }
 
 function timingSafeCompare(a: string, b: string): boolean {
@@ -512,11 +538,18 @@ const OPENAPI_SPEC = {
         type: "apiKey",
         in: "header",
         name: "x-session-token",
-        description: "Session token returned by POST /api/auth",
+        description: "Session token returned by POST /api/auth (for programmatic API clients)",
+      },
+      sessionCookie: {
+        type: "apiKey",
+        in: "cookie",
+        name: "om_session",
+        description:
+          "httpOnly session cookie set automatically by POST /api/auth (used by the web UI)",
       },
     },
   },
-  security: [{ sessionToken: [] }],
+  security: [{ sessionToken: [] }, { sessionCookie: [] }],
   paths: {
     "/api/session": {
       get: {
@@ -560,7 +593,8 @@ const OPENAPI_SPEC = {
         },
         responses: {
           200: {
-            description: "Authentication token",
+            description:
+              "Authentication token. Also sets the httpOnly `om_session` cookie for browser clients; API clients can send the returned token via the x-session-token header instead.",
             content: {
               "application/json": {
                 schema: {
@@ -574,6 +608,7 @@ const OPENAPI_SPEC = {
             },
           },
           401: { description: "Invalid master key" },
+          429: { description: "Too many failed attempts" },
         },
       },
     },
@@ -819,7 +854,7 @@ async function handleRequest(req: Request, server: Bun.Server<undefined>): Promi
 
   // Session status (public)
   if (url.pathname === "/api/session" && req.method === "GET") {
-    const token = req.headers.get("x-session-token") || "";
+    const token = getRequestToken(req);
     return Response.json(
       {
         authRequired: !!MASTER_KEY,
@@ -848,9 +883,22 @@ async function handleRequest(req: Request, server: Bun.Server<undefined>): Promi
           return jsonError("Unauthorized", 401);
         }
         authFailures.delete(clientIp);
-        const token = generateToken();
-        sessions.set(token, Date.now() + SESSION_TTL);
-        return Response.json({ token, expires: sessions.get(token) });
+        const { token, expires } = createSessionToken(SESSION_SECRET, SESSION_TTL);
+        // Browser clients get the token as an httpOnly cookie (unreadable from
+        // JS); it's also returned in the body for programmatic API clients
+        // that authenticate via the x-session-token header instead.
+        return Response.json(
+          { token, expires },
+          {
+            headers: {
+              "Set-Cookie": sessionCookie(
+                token,
+                Math.floor(SESSION_TTL / 1000),
+                isRequestSecure(req, url),
+              ),
+            },
+          },
+        );
       } catch {
         return jsonError("Invalid request", 400);
       }
@@ -859,9 +907,14 @@ async function handleRequest(req: Request, server: Bun.Server<undefined>): Promi
 
   // Logout
   if (url.pathname === "/api/logout" && req.method === "POST") {
-    const token = req.headers.get("x-session-token") || "";
-    if (token) sessions.delete(token);
-    return Response.json({ ok: true });
+    const token = getRequestToken(req);
+    // Tokens are stateless, so logout has to actively revoke: remember the
+    // token until its natural expiry, and clear the browser cookie.
+    if (token) revokedTokens.set(token, tokenExpiry(token) || Date.now());
+    return Response.json(
+      { ok: true },
+      { headers: { "Set-Cookie": sessionCookie("", 0, isRequestSecure(req, url)) } },
+    );
   }
 
   // App version (public)
@@ -909,8 +962,7 @@ async function handleRequest(req: Request, server: Bun.Server<undefined>): Promi
 
   // Auth gate (API only)
   if (MASTER_KEY) {
-    const token = req.headers.get("x-session-token") || "";
-    if (!isSessionValid(token)) {
+    if (!isSessionValid(getRequestToken(req))) {
       return jsonError("Unauthorized", 401);
     }
   }

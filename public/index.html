@@ -1312,14 +1312,13 @@ async function fetchModels() {
   return modelCache;
 }
 
+// Auth rides on the httpOnly om_session cookie, which same-origin fetch sends
+// automatically — no token is stored or readable in JS.
 function api(path, opts = {}) {
   const { headers: customHeaders, ...rest } = opts;
-  const token = sessionStorage.getItem('sessionToken');
   const headers = { 'Content-Type': 'application/json', ...customHeaders };
-  if (token) headers['x-session-token'] = token;
   return fetch(path, { headers, ...rest }).then(r => {
     if (r.status === 401 && authRequired) {
-      sessionStorage.removeItem('sessionToken');
       document.getElementById('login-overlay').classList.add('open');
     }
     return r;
@@ -1484,7 +1483,6 @@ async function checkSession() {
       return false;
     }
     if (!authRequired) {
-      sessionStorage.removeItem('sessionToken');
       document.getElementById('login-overlay').classList.remove('open');
     }
     return true;
@@ -1500,10 +1498,11 @@ async function doLogin() {
   err.style.display = 'none';
   if (!key) return;
   try {
+    // On success the server sets the httpOnly session cookie — nothing to
+    // store client-side.
     const r = await api('/api/auth', { method: 'POST', body: JSON.stringify({ key }) });
     if (!r.ok) throw new Error('Invalid key');
-    const d = await r.json();
-    sessionStorage.setItem('sessionToken', d.token);
+    document.getElementById('login-key').value = '';
     document.getElementById('login-overlay').classList.remove('open');
     document.getElementById('logout-btn').style.display = 'inline-flex';
     connect();
@@ -1515,7 +1514,6 @@ async function doLogin() {
 
 async function doLogout() {
   await api('/api/logout', { method: 'POST' });
-  sessionStorage.removeItem('sessionToken');
   location.reload();
 }
 
