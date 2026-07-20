@@ -6,8 +6,11 @@
 <title>Ollama Manager</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f0f0f'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23c8f060' stroke-width='2.5'/%3E%3Crect x='14.5' y='10' width='3' height='12' fill='%23c8f060' transform='rotate(25 16 16)'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<!-- No integrity= here: Google Fonts serves different CSS bytes per User-Agent
+     (browser-specific font formats), so a fixed SRI hash would break in some
+     browsers. The CSP style-src/font-src allowlist is the mitigation instead. -->
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Syne:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.33.0/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.33.0/dist/tabler-icons.min.css" integrity="sha384-bwXm/zkV6n5XGP9yIcUpKqATFAKcmKWYBVG6tbgRAHzcLakIlI2qlRbLBmgb/y3D" crossorigin="anonymous">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -568,6 +571,7 @@ tr:hover td { background: var(--bg3); }
 .toast.success { border-left: 3px solid var(--success); }
 .toast.error { border-left: 3px solid var(--danger); }
 .toast.info { border-left: 3px solid var(--info); }
+.toast.warning { border-left: 3px solid var(--warning); }
 @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
 
 .toast-close {
@@ -1380,11 +1384,14 @@ const pageLoaders = {
   litellm: loadLiteLLMStatus,
 };
 
-function nav(el) {
-  const page = el.dataset.page;
+function navigateTo(page) {
   activatePage(page);
   location.hash = page;
   pageLoaders[page]?.();
+}
+
+function nav(el) {
+  navigateTo(el.dataset.page);
 }
 
 window.addEventListener('hashchange', () => {
@@ -1439,7 +1446,7 @@ function toast(msg, type = 'info') {
 
   const el = document.createElement('div');
   el.className = `toast ${type}`;
-  const icons = { success: 'ti-check', error: 'ti-alert-circle', info: 'ti-info-circle' };
+  const icons = { success: 'ti-check', error: 'ti-alert-circle', info: 'ti-info-circle', warning: 'ti-alert-triangle' };
   el.innerHTML = `<i class="ti ${icons[type] || 'ti-info-circle'}" aria-hidden="true"></i> ${escHtml(msg)}<button class="toast-close" aria-label="Dismiss">&times;</button>`;
   el.querySelector('.toast-close').onclick = () => el.remove();
   container.appendChild(el);
@@ -1455,6 +1462,8 @@ function setStatus(ok, version) {
   txt.textContent = ok ? (version && version !== 'unknown' ? 'v' + version : 'unknown') : 'unreachable';
 }
 
+// Returns true once the caller is safe to hit authenticated endpoints
+// (either auth isn't required, or a valid session is already present).
 async function checkSession() {
   try {
     const r = await api('/api/session');
@@ -1463,14 +1472,16 @@ async function checkSession() {
     document.getElementById('logout-btn').style.display = authRequired ? 'inline-flex' : 'none';
     if (authRequired && !d.authenticated) {
       document.getElementById('login-overlay').classList.add('open');
-      return;
+      return false;
     }
     if (!authRequired) {
       sessionStorage.removeItem('sessionToken');
       document.getElementById('login-overlay').classList.remove('open');
     }
+    return true;
   } catch(e) {
     toast('Session check failed', 'error');
+    return false;
   }
 }
 
@@ -1511,25 +1522,33 @@ async function loadAppVersion() {
   } catch(_) {}
 }
 
+let lastKnownConnected = null;
+
 async function connect() {
   try {
     const r = await api('/api/version');
+    if (!r.ok) throw new Error(await httpErrorDetail(r));
     const d = await r.json();
     const version = d.version || 'unknown';
     setStatus(true, version);
     document.getElementById('dash-version').textContent = version;
-    toast('Connected to Ollama ' + version, 'success');
+    // Only toast on an actual state change, not on every manual refresh.
+    if (lastKnownConnected !== true) toast('Connected to Ollama ' + version, 'success');
+    lastKnownConnected = true;
     await loadDashboard();
   } catch(e) {
     setStatus(false, '');
     document.getElementById('dash-version').textContent = '—';
-    toast('Ollama unreachable', 'error');
+    if (lastKnownConnected !== false) toast('Ollama unreachable', 'error');
+    lastKnownConnected = false;
   }
 }
 
 async function loadDashboard() {
   try {
     const [modR, runR] = await Promise.all([api('/api/tags'), api('/api/ps')]);
+    if (!modR.ok) throw new Error(await httpErrorDetail(modR));
+    if (!runR.ok) throw new Error(await httpErrorDetail(runR));
     const modD = await modR.json();
     const runD = await runR.json();
     modelCache = modD.models || [];
@@ -1561,7 +1580,7 @@ async function loadModels() {
   try {
     const models = await fetchModels();
     if (models.length === 0) {
-      wrap.innerHTML = '<div class="empty"><i class="ti ti-box" aria-hidden="true"></i>No models found.<br><button class="btn btn-primary" style="margin-top:12px" onclick="activatePage(\'pull\');location.hash=\'pull\'"><i class="ti ti-download" aria-hidden="true"></i> Pull your first model</button></div>';
+      wrap.innerHTML = '<div class="empty"><i class="ti ti-box" aria-hidden="true"></i>No models found.<br><button class="btn btn-primary" style="margin-top:12px" onclick="navigateTo(\'pull\')"><i class="ti ti-download" aria-hidden="true"></i> Pull your first model</button></div>';
       return;
     }
     wrap.innerHTML = `<div class="model-grid">${models.map(m => `
@@ -1576,8 +1595,8 @@ async function loadModels() {
           <span class="badge">${escHtml(m.details?.parameter_size || '')}</span>
         </div>
         <div class="model-actions">
-          <button class="btn btn-sm" data-action="info" data-model="${escAttr(m.name)}"><i class="ti ti-info-circle" aria-hidden="true"></i> Info</button>
-          <button class="btn btn-sm btn-danger" data-action="delete" data-model="${escAttr(m.name)}"><i class="ti ti-trash" aria-hidden="true"></i> Delete</button>
+          <button class="btn btn-sm" data-action="info" data-model="${escHtml(m.name)}"><i class="ti ti-info-circle" aria-hidden="true"></i> Info</button>
+          <button class="btn btn-sm btn-danger" data-action="delete" data-model="${escHtml(m.name)}"><i class="ti ti-trash" aria-hidden="true"></i> Delete</button>
         </div>
       </div>`).join('')}</div>`;
   } catch(e) { toast('Failed to load models', 'error'); }
@@ -1703,24 +1722,35 @@ async function pullModel() {
   try {
     const r = await api('/api/pull', { method: 'POST', body: JSON.stringify({ model, stream: true }), signal: pullAbort.signal });
     if (!r.ok) throw new Error(await httpErrorDetail(r));
-    let lastLayer = '';
-    let pulled = 0, totalLayers = 0;
+
+    // Ollama streams one "pulling <digest>" sequence per layer, each with its
+    // own completed/total byte counts. Track them per digest and sum, so the
+    // bar shows true overall progress instead of resetting near 0 every time
+    // a new layer starts (which is what happens if you only look at the
+    // latest event's completed/total).
+    const layerBytes = new Map();
+    let lastStatus = '';
+
     for await (const ev of readNdjsonLines(r)) {
-      if (ev.status === 'pulling manifest') {
-        logDiv.textContent = 'Downloading manifest...';
-      } else if (ev.status?.startsWith('pulling')) {
-        lastLayer = ev.status;
-        if (ev.completed && ev.total) pulled = Math.round(ev.completed / ev.total * 100);
-        if (ev.total) totalLayers = ev.total;
-      } else if (ev.status === 'success') {
+      if (ev.status) lastStatus = ev.status === 'pulling manifest' ? 'Downloading manifest…' : ev.status;
+      if (ev.digest && typeof ev.total === 'number') {
+        layerBytes.set(ev.digest, { completed: ev.completed || 0, total: ev.total });
+      }
+
+      let completedBytes = 0, totalBytes = 0;
+      for (const layer of layerBytes.values()) {
+        completedBytes += layer.completed;
+        totalBytes += layer.total;
+      }
+      const pct = totalBytes > 0 ? Math.min(100, Math.round((completedBytes / totalBytes) * 100)) : 0;
+
+      if (ev.status === 'success') {
         bar.style.width = '100%';
         toast('Pull complete: ' + model, 'success');
+      } else if (totalBytes > 0) {
+        bar.style.width = pct + '%';
       }
-      // Update compact line
-      if (lastLayer) {
-        logDiv.innerHTML = `<span class="log-line">${escHtml(lastLayer)}${totalLayers ? ` (${pulled}%)` : ''}</span>`;
-      }
-      if (ev.total) bar.style.width = Math.round(ev.completed / ev.total * 100) + '%';
+      logDiv.innerHTML = `<span class="log-line">${escHtml(lastStatus)}${totalBytes ? ` (${pct}%)` : ''}</span>`;
     }
   } catch(e) {
     if (e.name !== 'AbortError') toast('Pull failed: ' + e.message, 'error');
@@ -1759,11 +1789,15 @@ async function pushModel() {
   } catch(e) { toast('Push failed', 'error'); }
 }
 
-let lastModelCacheLen = -1;
+let lastModelCacheKey = '';
 
 function populateModelSelects() {
-  if (modelCache.length === lastModelCacheLen) return;
-  lastModelCacheLen = modelCache.length;
+  // Keyed by name, not just count — deleting one model and pulling another
+  // (count unchanged) must still refresh the dropdowns, otherwise they can
+  // keep offering a model that was just deleted.
+  const key = modelCache.map(m => m.name).join('\n');
+  if (key === lastModelCacheKey) return;
+  lastModelCacheKey = key;
   ['chat-model','gen-model','embed-model'].forEach(id => {
     const sel = document.getElementById(id);
     const cur = sel.value;
@@ -1775,13 +1809,11 @@ function populateModelSelects() {
 }
 
 let chatAbort = null;
-let chatSystemSnapshot = '';
 
 function clearChat() {
   chatAbort?.abort();
   chatAbort = null;
   chatHistory = [];
-  chatSystemSnapshot = '';
   document.getElementById('chat-messages').innerHTML =
     '<div class="empty" style="margin:auto"><i class="ti ti-messages" aria-hidden="true"></i>Start a conversation<br><span style="font-size:12px;color:var(--text3)">Select a model above to begin</span></div>';
 }
@@ -1816,7 +1848,6 @@ async function sendChat() {
   const system = document.getElementById('chat-system').value.trim();
   if (chatHistory.length === 0 && system) {
     chatHistory.push({ role: 'system', content: system });
-    chatSystemSnapshot = system;
   }
 
   input.value = '';
@@ -1896,15 +1927,24 @@ async function sendChat() {
   }
 }
 
-function renderMarkdown(el) {
-  const temp = document.createElement('div');
-  temp.textContent = el.textContent;
-  let text = temp.textContent;
+// Only these URL schemes (plus relative/fragment links) are turned into real
+// anchors by renderMarkdown() — everything else (javascript:, data:, vbscript:, …)
+// is left as literal text instead of an <a href>.
+const SAFE_LINK_SCHEME_RE = /^(https?:|mailto:|\/|#)/i;
 
-  // Code blocks — protect from other transforms
+function renderMarkdown(el) {
+  // Model output is untrusted. Escape it to text *before* any markdown-to-HTML
+  // transform runs, so a response containing raw "<img onerror=…>" etc. can
+  // never reach innerHTML as live markup — only the trusted tags we build
+  // below do. (Writing to and reading back .textContent does NOT escape
+  // anything; it was a no-op that looked like an escape step.)
+  let text = escHtml(el.textContent);
+
+  // Code blocks — protect from other transforms. `code` is already escaped
+  // (part of `text` above), so it must NOT be passed through escHtml() again.
   const codeBlocks = [];
   text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
-    codeBlocks.push(`<pre style="background:var(--bg4);border:1px solid var(--border);border-radius:var(--radius);padding:10px;font-family:var(--mono);font-size:12px;color:var(--text);overflow-x:auto;margin:8px 0"><code style="background:transparent;padding:0;border-radius:0">${escHtml(code.trim())}</code></pre>`);
+    codeBlocks.push(`<pre style="background:var(--bg4);border:1px solid var(--border);border-radius:var(--radius);padding:10px;font-family:var(--mono);font-size:12px;color:var(--text);overflow-x:auto;margin:8px 0"><code style="background:transparent;padding:0;border-radius:0">${code.trim()}</code></pre>`);
     return `\n\n<!--CB:${codeBlocks.length - 1}-->\n\n`;
   });
 
@@ -1914,8 +1954,12 @@ function renderMarkdown(el) {
   // Headers
   text = text.replace(/^#{1,3} (.+)$/gm, '<strong style="display:block;font-size:15px;margin:8px 0 4px">$1</strong>');
 
-  // Links [text](url)
-  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:var(--info);text-decoration:underline">$1</a>');
+  // Links [text](url) — label/url are substrings of the already-escaped
+  // `text`, safe to interpolate as-is; only the scheme needs validating.
+  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (full, label, url) => {
+    if (!SAFE_LINK_SCHEME_RE.test(url.trim())) return full;
+    return `<a href="${url}" target="_blank" rel="noopener" style="color:var(--info);text-decoration:underline">${label}</a>`;
+  });
 
   // Bullet lists
   text = text.replace(/^- (.+)$/gm, '<span style="display:block;padding-left:12px;position:relative"><span style="position:absolute;left:0;color:var(--accent)">•</span>$1</span>');
@@ -2091,8 +2135,26 @@ function toggleCatalogSort() {
   renderCatalog();
 }
 
+// Normalizes an ollama.com size badge ("7b", "335m", "8x22b", …) into a
+// billions-of-parameters number comparable against the filter thresholds
+// below. Plain parseFloat() alone is wrong here: it ignores the b/m unit
+// (so "335m" — 335 million params — compares as 335, larger than every
+// threshold) and only reads the leading number of MoE labels like "8x22b"
+// (comparing as 8, which misclassifies a ~141B-class model as "small").
 function parseModelSize(s) {
-  const n = parseFloat(s);
+  if (!s) return Infinity;
+  const str = String(s).trim().toLowerCase();
+  const moe = str.match(/^(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s*([bm])$/);
+  if (moe) {
+    const n = parseFloat(moe[1]) * parseFloat(moe[2]);
+    return moe[3] === 'm' ? n / 1000 : n;
+  }
+  const plain = str.match(/^(\d+(?:\.\d+)?)\s*([bm])$/);
+  if (plain) {
+    const n = parseFloat(plain[1]);
+    return plain[2] === 'm' ? n / 1000 : n;
+  }
+  const n = parseFloat(str);
   return isNaN(n) ? Infinity : n;
 }
 
@@ -2130,7 +2192,14 @@ function renderCatalog() {
   const sizeFilter = document.getElementById('catalog-size').value;
   const installedBaseNames = new Set(modelCache.map(m => baseName(m.name)));
   const runningBaseNames = new Set([...runningNames].map(n => baseName(n)));
-  const firstInstalledMap = new Map(modelCache.map(m => [baseName(m.name), m.name]));
+  // First-wins: if multiple installed tags share a base name (e.g. llama3.2:1b
+  // and llama3.2:3b), the catalog card's "Details" button should open the
+  // first one found, not whichever happened to be inserted into the Map last.
+  const firstInstalledMap = new Map();
+  for (const m of modelCache) {
+    const base = baseName(m.name);
+    if (!firstInstalledMap.has(base)) firstInstalledMap.set(base, m.name);
+  }
 
   let filtered = catalogData.filter(m => {
     if (q && !m.name.toLowerCase().includes(q) && !(m.description || '').toLowerCase().includes(q)) return false;
@@ -2170,8 +2239,8 @@ function renderCatalog() {
       <div class="catalog-badges">${renderCaps(m.capabilities)}${renderSizes(m.sizes)}</div>
       <div style="display:flex;gap:8px;margin-top:4px">
         ${inst
-          ? `<button class="btn btn-sm" style="flex:1" data-action="info" data-model="${escAttr(firstInstalled)}"><i class="ti ti-info-circle" aria-hidden="true"></i> Details</button>`
-          : `<button class="btn btn-sm btn-primary" style="flex:1" data-action="quick-pull" data-model="${escAttr(m.name)}"><i class="ti ti-download" aria-hidden="true"></i> Pull</button>`
+          ? `<button class="btn btn-sm" style="flex:1" data-action="info" data-model="${escHtml(firstInstalled)}"><i class="ti ti-info-circle" aria-hidden="true"></i> Details</button>`
+          : `<button class="btn btn-sm btn-primary" style="flex:1" data-action="quick-pull" data-model="${escHtml(m.name)}"><i class="ti ti-download" aria-hidden="true"></i> Pull</button>`
         }
         <a class="btn btn-sm" href="https://ollama.com/library/${encodeURIComponent(baseName(m.name))}" target="_blank" rel="noopener" title="View on ollama.com">
           <i class="ti ti-external-link" aria-hidden="true"></i>
@@ -2185,9 +2254,10 @@ function showTagPicker(name) {
   const m = catalogData.find(x => x.name === name);
   if (!m) return;
   const sizes = m.sizes || [];
-  const hasThinking = m.capabilities?.includes('thinking');
-  const hasVision = m.capabilities?.includes('vision');
-  const isCloud = m.isCloud || (sizes.length === 0 && (hasThinking || hasVision));
+  // isCloud comes straight from the model's own cloud badge on
+  // ollama.com/library now, so it's authoritative — no more guessing from
+  // capabilities as a proxy for "this is probably cloud-only".
+  const isCloud = m.isCloud;
   const tags = sizes.length > 0
     ? ['latest', ...sizes.filter(s => s !== 'latest'), ...(isCloud ? ['cloud'] : [])]
     : isCloud
@@ -2217,7 +2287,7 @@ function showTagPicker(name) {
 function pullTag(name) {
   document.getElementById('modal-overlay').classList.remove('open');
   document.getElementById('pull-model').value = name;
-  activatePage('pull');
+  navigateTo('pull');
 }
 
 async function refreshRunning() {
@@ -2406,6 +2476,19 @@ document.getElementById('login-key').addEventListener('keydown', e => {
   if (e.key === 'Enter') doLogin();
 });
 
+document.getElementById('pull-model').addEventListener('keydown', e => {
+  if (e.key === 'Enter') pullModel();
+});
+document.getElementById('copy-src').addEventListener('keydown', e => {
+  if (e.key === 'Enter') copyModel();
+});
+document.getElementById('copy-dst').addEventListener('keydown', e => {
+  if (e.key === 'Enter') copyModel();
+});
+document.getElementById('push-model').addEventListener('keydown', e => {
+  if (e.key === 'Enter') pushModel();
+});
+
 window.addEventListener('pageshow', (e) => {
   if (e.persisted) checkSession();
 });
@@ -2415,8 +2498,12 @@ window.addEventListener('pageshow', (e) => {
   activatePage(startPage);
   pageLoaders[startPage]?.();
 
-  await checkSession();
-  connect();
+  // Skip connect() when a master key is required and we're not authenticated
+  // yet — otherwise the proxy's 401 gets swallowed and the header shows a
+  // false "connected" status behind the login overlay. doLogin() calls
+  // connect() itself once a session token is obtained.
+  const authed = await checkSession();
+  if (authed) connect();
   loadAppVersion();
 })();
 </script>

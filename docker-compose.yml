@@ -6,9 +6,15 @@ services:
       - "3000:3000"
     environment:
       - OLLAMA_HOST=http://host.docker.internal:11434
-      # Optional: require master key to access the UI
+      # Required for MASTER_KEY unless this instance is on a fully trusted,
+      # non-internet-facing network — without it, anyone who can reach this
+      # port has full access to the Ollama API (pull/delete/create/inference).
       # - MASTER_KEY=your-secret-key-here
       # Optional: connect to LiteLLM instance for model syncing
       # - LITELLM_URL=http://litellm:4000
       # - LITELLM_KEY=your-secret-key-here
       # - LITELLM_SYNC_INTERVAL=30   # minutes, 0 = disable auto-sync
+    extra_hosts:
+      # host.docker.internal only resolves out of the box on Docker Desktop
+      # (macOS/Windows). This makes it resolve on native Linux Docker too.
+      - "host.docker.internal:host-gateway"

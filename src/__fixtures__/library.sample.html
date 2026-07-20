@@ -1,0 +1,142 @@
+<!--
+  Trimmed excerpt of ollama.com/library's real card markup (fetched and verified
+  2026-07-20), kept minimal on purpose. Covers the shapes the parser must handle:
+  a plain model with a size badge and no capabilities, a model with capability +
+  size badges, a cloud-only model with no local sizes, a MoE-style size label
+  ("8x22b"), a sub-billion size label ("335m"), and an HTML entity in the
+  description. If ollama.com changes this markup again, update this fixture from
+  a fresh `curl https://ollama.com/library` and re-run `bun test`.
+-->
+<html>
+<body>
+<ul>
+
+<li  class="flex items-baseline border-b border-neutral-200 py-6">
+  <a href="/library/alfred" class="group w-full space-y-5">
+    <div  title="alfred" class="flex flex-col">
+      <h2 class="truncate text-xl font-medium underline-offset-2 md:text-2xl">
+        <div class="flex space-x-2 items-center">
+          <span class="group-hover:underline truncate">alfred</span>
+        </div>
+      </h2>
+      <p class="max-w-lg break-words text-neutral-800 text-md">A robust conversational model designed to be used for both chat and instruct use cases.</p>
+    </div>
+    <div class="flex flex-col space-y-2">
+      <div class="flex flex-wrap space-x-2">
+        <span  class="inline-flex items-center rounded-md bg-[#ddf4ff] px-2 py-0.5 text-xs font-medium text-blue-600 sm:text-[13px]">40b</span>
+      </div>
+      <p class="my-4 flex space-x-5 text-[13px] font-medium text-neutral-500"></p>
+    </div>
+  </a>
+</li>
+
+<li  class="flex items-baseline border-b border-neutral-200 py-6">
+  <a href="/library/llama3.2" class="group w-full space-y-5">
+    <div  title="llama3.2" class="flex flex-col">
+      <h2 class="truncate text-xl font-medium underline-offset-2 md:text-2xl">
+        <div class="flex space-x-2 items-center">
+          <span class="group-hover:underline truncate">llama3.2</span>
+        </div>
+      </h2>
+      <p class="max-w-lg break-words text-neutral-800 text-md">Meta&#39;s Llama 3.2 goes small with 1B and 3B models.</p>
+    </div>
+    <div class="flex flex-col space-y-2">
+      <div class="flex flex-wrap space-x-2">
+        <span  class="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600 sm:text-[13px]">tools</span>
+        <span  class="inline-flex items-center rounded-md bg-[#ddf4ff] px-2 py-0.5 text-xs font-medium text-blue-600 sm:text-[13px]">1b</span>
+        <span  class="inline-flex items-center rounded-md bg-[#ddf4ff] px-2 py-0.5 text-xs font-medium text-blue-600 sm:text-[13px]">3b</span>
+      </div>
+      <p class="my-4 flex space-x-5 text-[13px] font-medium text-neutral-500"></p>
+    </div>
+  </a>
+</li>
+
+<li  class="flex items-baseline border-b border-neutral-200 py-6">
+  <a href="/library/gpt-oss" class="group w-full space-y-5">
+    <div  title="gpt-oss" class="flex flex-col">
+      <h2 class="truncate text-xl font-medium underline-offset-2 md:text-2xl">
+        <div class="flex space-x-2 items-center">
+          <span class="group-hover:underline truncate">gpt-oss</span>
+        </div>
+      </h2>
+      <p class="max-w-lg break-words text-neutral-800 text-md">OpenAI&#39;s open-weight models designed for powerful reasoning, agentic tasks, and versatile developer use cases.</p>
+    </div>
+    <div class="flex flex-col space-y-2">
+      <div class="flex flex-wrap space-x-2">
+        <span  class="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600 sm:text-[13px]">tools</span>
+        <span  class="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600 sm:text-[13px]">thinking</span>
+        <span  class="inline-flex items-center rounded-md bg-cyan-50 px-2 py-0.5 text-xs font-medium text-cyan-500 sm:text-[13px]">cloud</span>
+        <span  class="inline-flex items-center rounded-md bg-[#ddf4ff] px-2 py-0.5 text-xs font-medium text-blue-600 sm:text-[13px]">20b</span>
+        <span  class="inline-flex items-center rounded-md bg-[#ddf4ff] px-2 py-0.5 text-xs font-medium text-blue-600 sm:text-[13px]">120b</span>
+      </div>
+      <p class="my-4 flex space-x-5 text-[13px] font-medium text-neutral-500"></p>
+    </div>
+  </a>
+</li>
+
+<li  class="flex items-baseline border-b border-neutral-200 py-6">
+  <a href="/library/minimax-m2.7" class="group w-full space-y-5">
+    <div  title="minimax-m2.7" class="flex flex-col">
+      <h2 class="truncate text-xl font-medium underline-offset-2 md:text-2xl">
+        <div class="flex space-x-2 items-center">
+          <span class="group-hover:underline truncate">minimax-m2.7</span>
+        </div>
+      </h2>
+      <p class="max-w-lg break-words text-neutral-800 text-md">MiniMax&#39;s M2-series model for coding, agentic workflows, and professional productivity.</p>
+    </div>
+    <div class="flex flex-col space-y-2">
+      <div class="flex flex-wrap space-x-2">
+        <span  class="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600 sm:text-[13px]">tools</span>
+        <span  class="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600 sm:text-[13px]">thinking</span>
+        <span  class="inline-flex items-center rounded-md bg-cyan-50 px-2 py-0.5 text-xs font-medium text-cyan-500 sm:text-[13px]">cloud</span>
+      </div>
+      <p class="my-4 flex space-x-5 text-[13px] font-medium text-neutral-500"></p>
+    </div>
+  </a>
+</li>
+
+<li  class="flex items-baseline border-b border-neutral-200 py-6">
+  <a href="/library/mixtral" class="group w-full space-y-5">
+    <div  title="mixtral" class="flex flex-col">
+      <h2 class="truncate text-xl font-medium underline-offset-2 md:text-2xl">
+        <div class="flex space-x-2 items-center">
+          <span class="group-hover:underline truncate">mixtral</span>
+        </div>
+      </h2>
+      <p class="max-w-lg break-words text-neutral-800 text-md">A set of Mixture of Experts (MoE) model with open weights.</p>
+    </div>
+    <div class="flex flex-col space-y-2">
+      <div class="flex flex-wrap space-x-2">
+        <span  class="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600 sm:text-[13px]">tools</span>
+        <span  class="inline-flex items-center rounded-md bg-[#ddf4ff] px-2 py-0.5 text-xs font-medium text-blue-600 sm:text-[13px]">8x7b</span>
+        <span  class="inline-flex items-center rounded-md bg-[#ddf4ff] px-2 py-0.5 text-xs font-medium text-blue-600 sm:text-[13px]">8x22b</span>
+      </div>
+      <p class="my-4 flex space-x-5 text-[13px] font-medium text-neutral-500"></p>
+    </div>
+  </a>
+</li>
+
+<li  class="flex items-baseline border-b border-neutral-200 py-6">
+  <a href="/library/all-minilm" class="group w-full space-y-5">
+    <div  title="all-minilm" class="flex flex-col">
+      <h2 class="truncate text-xl font-medium underline-offset-2 md:text-2xl">
+        <div class="flex space-x-2 items-center">
+          <span class="group-hover:underline truncate">all-minilm</span>
+        </div>
+      </h2>
+      <p class="max-w-lg break-words text-neutral-800 text-md">Embedding models on very large sentence level datasets.</p>
+    </div>
+    <div class="flex flex-col space-y-2">
+      <div class="flex flex-wrap space-x-2">
+        <span  class="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600 sm:text-[13px]">embedding</span>
+        <span  class="inline-flex items-center rounded-md bg-[#ddf4ff] px-2 py-0.5 text-xs font-medium text-blue-600 sm:text-[13px]">23m</span>
+        <span  class="inline-flex items-center rounded-md bg-[#ddf4ff] px-2 py-0.5 text-xs font-medium text-blue-600 sm:text-[13px]">335m</span>
+      </div>
+      <p class="my-4 flex space-x-5 text-[13px] font-medium text-neutral-500"></p>
+    </div>
+  </a>
+</li>
+
+</ul>
+</body>
+</html>
