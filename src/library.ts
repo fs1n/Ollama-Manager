@@ -1,77 +1,197 @@
-// Parser for the ollama.com/library registry catalog page.
+// Parser for the ollama.com library catalog.
 //
-// The page is server-rendered (no pagination — every model card is present in the
-// initial HTML) but has no stable data-testid/x-test-* hooks; the DOM structure has
-// changed at least once already (the previous parser targeted `x-test-model` /
-// `x-test-capability` / `x-test-size` attributes that no longer exist on the live
-// page, silently returning zero models). This parser keys off the one thing that's
-// unlikely to move independently of a full redesign: each card is a link to
-// `/library/<name>` wrapping a fixed Tailwind class, and its capability/size/cloud
-// badges share one badge shape distinguished only by background color:
-//   - bg-[#ddf4ff] ............ size badge, e.g. "7b", "8x22b", "335m"
-//   - bg-indigo-50 ............ capability badge, e.g. "tools", "vision"
-//   - bg-cyan-50 .............. the "cloud" badge (model has a hosted cloud variant)
+// Two server-rendered templates carry the same model cards:
+//   - /library ......... single page with every model (<a class="group w-full space-y-5">)
+//   - /search .......... HTMX-paginated variant (<a class="group w-full">) used as fallback
+//                         when /library's markup moves out from under us
+// The previous regex parser targeted exact Tailwind class strings and silently
+// returned zero models when ollama.com changed them, so this parser anchors on
+// the structure instead: each card is an <a href="/library/<name>"> whose badge
+// spans are distinguished only by background color:
+//   - bg-indigo-* ............ capability badge, e.g. "tools", "vision"
+//   - bg-cyan-* .............. the "cloud" badge (model has a hosted cloud variant)
+//   - bg-[#ddf4ff]/bg-blue-* . size badge, e.g. "7b", "8x22b" — but also non-param
+//                              variant labels like "e2b"/"e4b" (Gemma), which we
+//                              split into `variants` so size filters stay honest
+
+import { parse as parseHtml } from "node-html-parser";
 
 export interface LibraryModel {
   name: string;
   description: string;
   capabilities: string[];
+  /** Parameter-size badges, e.g. "7b", "8x22b", "335m" */
   sizes: string[];
+  /** Non-numeric size-slot badges, e.g. Gemma's "e2b"/"e4b" */
+  variants: string[];
   isCloud: boolean;
+  /** Raw pulls count as shown, e.g. "649.2K" */
+  pulls: string;
+  tagCount: number;
+  /** Relative updated text as shown, e.g. "1 week ago" */
+  updatedText: string;
+  /** ISO timestamp parsed from the updated span's title="… UTC" */
+  updatedAt: string | null;
 }
 
-const CARD_START_RE = /<a href="\/library\/([a-z0-9][a-z0-9._-]*)" class="group w-full space-y-5">/;
-const DESCRIPTION_RE = /text-neutral-800 text-md">([^<]*)<\/p>/;
-const BADGE_RE = /class="inline-flex items-center rounded-md (bg-\S+)[^"]*">([^<]*)<\/span>/g;
+export interface LibraryTag {
+  name: string;
+  size: string;
+  context: string;
+  input: string;
+}
 
-const ENTITY_MAP: Record<string, string> = {
-  "&#39;": "'",
-  "&apos;": "'",
-  "&quot;": '"',
-  "&amp;": "&",
-  "&lt;": "<",
-  "&gt;": ">",
-  "&nbsp;": " ",
-};
-const NAMED_ENTITY_RE = new RegExp(Object.keys(ENTITY_MAP).join("|"), "g");
+export interface LibraryModelDetail {
+  name: string;
+  tags: LibraryTag[];
+  pulls: string;
+  updatedText: string;
+  updatedAt: string | null;
+}
 
-export function decodeHtmlEntities(s: string): string {
-  return s
-    .replace(NAMED_ENTITY_RE, (m) => ENTITY_MAP[m] ?? m)
-    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(parseInt(code, 10)))
-    .trim();
+const SIZE_RE = /^\d+(?:\.\d+)?x\d+(?:\.\d+)?[bmk]$|^\d+(?:\.\d+)?[bmk]$/i;
+
+/** Splits a size-slot badge into sizes vs. non-param variants (e2b/e4b). */
+export function classifySizeBadge(label: string): "size" | "variant" {
+  return SIZE_RE.test(label) ? "size" : "variant";
+}
+
+/** "Aug 14, 2026 4:54 PM UTC" → ISO string, or null when unparseable. */
+export function parseUpdatedTitle(title: string): string | null {
+  const ms = Date.parse(title);
+  return Number.isNaN(ms) ? null : new Date(ms).toISOString();
 }
 
 export function parseLibraryHtml(html: string): LibraryModel[] {
+  const root = parseHtml(html);
   const models: LibraryModel[] = [];
-  const parts = html.split(CARD_START_RE);
 
-  // split() with a single-capture-group regex interleaves the capture into the
-  // result: [preamble, name1, body1, name2, body2, ..., trailingBody]
-  for (let i = 1; i < parts.length; i += 2) {
-    const name = parts[i];
-    const body = parts[i + 1] ?? "";
-    if (!name) continue;
+  for (const card of root.querySelectorAll('a[href^="/library/"]')) {
+    const href = card.getAttribute("href") ?? "";
+    const name = href.slice("/library/".length);
+    // Cards link directly to /library/<name> — skip deeper links (:tag, /tags subpaths)
+    if (!/^[a-z0-9][a-z0-9._-]*$/.test(name)) continue;
 
-    const descMatch = body.match(DESCRIPTION_RE);
-    const description = descMatch ? decodeHtmlEntities(descMatch[1]) : "";
+    // Description is the same <p> in both templates
+    const descEl = card.querySelector("p.text-neutral-800") ?? card.querySelector("p.text-md");
+    const description = descEl?.text.trim() ?? "";
 
     const capabilities: string[] = [];
     const sizes: string[] = [];
+    const variants: string[] = [];
     let isCloud = false;
 
-    for (const m of body.matchAll(BADGE_RE)) {
-      const bgClass = m[1];
-      const label = m[2].trim();
+    for (const badge of card.querySelectorAll("span")) {
+      const cls = badge.getAttribute("class") ?? "";
+      if (!cls.includes("rounded-md")) continue;
+      const label = badge.text.trim();
       if (!label) continue;
-      if (bgClass.startsWith("bg-indigo")) capabilities.push(label);
-      else if (bgClass.startsWith("bg-cyan")) isCloud = true;
-      else if (bgClass.startsWith("bg-[#ddf4ff]") || bgClass.startsWith("bg-blue"))
-        sizes.push(label);
+      if (cls.includes("bg-cyan")) {
+        isCloud = true;
+        capabilities.push("cloud");
+      } else if (cls.includes("bg-indigo")) {
+        capabilities.push(label);
+      } else if (cls.includes("bg-[#ddf4ff]") || cls.includes("bg-blue")) {
+        if (classifySizeBadge(label) === "size") sizes.push(label);
+        else variants.push(label);
+      }
     }
 
-    models.push({ name, description, capabilities, sizes, isCloud });
+    // Meta row: pulls count, tag count, updated (span with title="… UTC")
+    let pulls = "";
+    let tagCount = 0;
+    let updatedText = "";
+    let updatedAt: string | null = null;
+
+    const metaSpans = card.querySelectorAll("span.flex.items-center");
+    for (const span of metaSpans) {
+      const text = span.text.replace(/ /g, " ").trim();
+      if (/\bPulls$/.test(text)) {
+        pulls = text.replace(/\s*Pulls$/, "").trim();
+      } else if (/\bTags$/.test(text)) {
+        tagCount = parseInt(text.replace(/\s*Tags$/, "").trim(), 10) || 0;
+      } else if (/\bUpdated\b/.test(text)) {
+        updatedText = text.replace(/^Updated\s*/, "").trim();
+        updatedAt = parseUpdatedTitle(span.getAttribute("title") ?? "");
+      }
+    }
+
+    models.push({
+      name,
+      description,
+      capabilities,
+      sizes,
+      variants,
+      isCloud,
+      pulls,
+      tagCount,
+      updatedText,
+      updatedAt,
+    });
   }
 
   return models;
+}
+
+/** True when the search page carries an HTMX marker loading /search?page=<page+1>. */
+export function hasNextSearchPage(html: string, page: number): boolean {
+  return html.includes(`hx-get="/search?page=${page + 1}"`);
+}
+
+/** Dedupe by model name, first occurrence wins (later pages may repeat cards). */
+export function dedupeByName(models: LibraryModel[]): LibraryModel[] {
+  const seen = new Set<string>();
+  return models.filter((m) => {
+    if (seen.has(m.name)) return false;
+    seen.add(m.name);
+    return true;
+  });
+}
+
+/**
+ * Parses the tag table on /library/<name>. Desktop rows are
+ * <a href="/library/<name>:<tag>"> links followed by size/context/input cells;
+ * mobile rows repeat the same tags, so we dedupe by tag name.
+ */
+export function parseLibraryDetailHtml(html: string, name: string): LibraryModelDetail {
+  const root = parseHtml(html);
+  const tags: LibraryTag[] = [];
+  const seen = new Set<string>();
+
+  const prefix = `/library/${name}:`;
+  for (const link of root.querySelectorAll(`a[href^="${prefix}"]`)) {
+    const tagName = (link.getAttribute("href") ?? "").slice(prefix.length);
+    if (!tagName || seen.has(tagName)) continue;
+
+    // Desktop row: the <a> sits in a grid row (class "sm:grid-cols-12 text-[13px]")
+    // whose sibling <p> cells carry size/context/input. Mobile rows are <a> tags
+    // themselves with a summary line — skipping them also dedupes the tag names.
+    const row = link.closest("div[class*='grid-cols-12']");
+    if (!row) continue;
+    const cells = row.querySelectorAll("p[class*='col-span-2']");
+    const cellText = cells.map((c) => c.text.trim());
+    seen.add(tagName);
+    tags.push({
+      name: tagName,
+      size: cellText[0] ?? "",
+      context: cellText[1] ?? "",
+      input: cellText[2] ?? "",
+    });
+  }
+
+  // Page-level meta: "<n> Downloads" and the updated span's title="… UTC"
+  let pulls = "";
+  let updatedText = "";
+  let updatedAt: string | null = null;
+  for (const span of root.querySelectorAll("span.flex.items-center")) {
+    const text = span.text.replace(/ /g, " ").trim();
+    if (/\bDownloads$/.test(text)) {
+      pulls = text.replace(/\s*Downloads$/, "").trim();
+    } else if (/\bUpdated\b/.test(text)) {
+      updatedText = text.replace(/^Updated\s*/, "").trim();
+      updatedAt = parseUpdatedTitle(span.getAttribute("title") ?? "");
+    }
+  }
+
+  return { name, tags, pulls, updatedText, updatedAt };
 }
