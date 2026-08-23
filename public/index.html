@@ -648,6 +648,21 @@ tr:hover td { background: var(--bg3); }
   color: var(--text3);
   border: 1px solid var(--border);
 }
+.size-badge.variant {
+  background: rgba(251,146,60,0.08);
+  color: #fdba74;
+  border-color: rgba(251,146,60,0.3);
+}
+.catalog-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text3);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.catalog-meta span { display: inline-flex; align-items: center; gap: 4px; }
+.catalog-meta .ti { font-size: 12px; opacity: 0.7; }
 .cat-cap, .cat-view { transition: background-color 0.15s, color 0.15s, border-color 0.15s; }
 .cat-cap.active { background: var(--accent); color: #0f0f0f; border-color: transparent; }
 .cat-view.active { background: var(--bg4); color: var(--accent); border-color: var(--accent); }
@@ -1219,17 +1234,22 @@ tr:hover td { background: var(--bg3); }
         <option value="13">Medium (≤13B)</option>
         <option value="70">Large (≤70B)</option>
       </select>
-      <button class="btn btn-sm" id="catalog-sort" onclick="toggleCatalogSort()" title="Sort A–Z" aria-label="Sort models"><i class="ti ti-sort-ascending" aria-hidden="true"></i></button>
+      <select id="catalog-sort" style="width:150px" onchange="setCatalogSort(this.value)" aria-label="Sort models">
+        <option value="az">Name A–Z</option>
+        <option value="za">Name Z–A</option>
+        <option value="popular">Most pulled</option>
+        <option value="newest">Recently updated</option>
+      </select>
       <button class="btn" onclick="loadCatalog()"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
     </div>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px" id="catalog-cap-filters">
     <button class="btn btn-sm cat-cap active" data-cap="all">All</button>
-    <button class="btn btn-sm cat-cap" data-cap="tools"><i class="ti ti-tool" aria-hidden="true"></i> Tools</button>
-    <button class="btn btn-sm cat-cap" data-cap="vision"><i class="ti ti-eye" aria-hidden="true"></i> Vision</button>
+    <button class="btn btn-sm cat-cap" data-cap="cloud"><i class="ti ti-cloud" aria-hidden="true"></i> Cloud</button>
     <button class="btn btn-sm cat-cap" data-cap="embedding"><i class="ti ti-vector" aria-hidden="true"></i> Embedding</button>
+    <button class="btn btn-sm cat-cap" data-cap="vision"><i class="ti ti-eye" aria-hidden="true"></i> Vision</button>
+    <button class="btn btn-sm cat-cap" data-cap="tools"><i class="ti ti-tool" aria-hidden="true"></i> Tools</button>
     <button class="btn btn-sm cat-cap" data-cap="thinking"><i class="ti ti-brain" aria-hidden="true"></i> Thinking</button>
-    <button class="btn btn-sm cat-cap" data-cap="audio"><i class="ti ti-volume" aria-hidden="true"></i> Audio</button>
     <span style="margin-left:auto;font-size:12px;color:var(--text3);align-self:center" id="catalog-count"></span>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px" id="catalog-view-toggle">
@@ -2109,7 +2129,7 @@ async function triggerLiteLLMSync() {
 let catalogData = [];
 let catCapFilter = 'all';
 let catSizeFilter = 'any';
-let catSort = 'asc';
+let catSort = 'az';
 let catView = 'all';
 let runningNames = new Set();
 let authRequired = false;
@@ -2121,14 +2141,19 @@ function clearCatalogSearch() {
   renderCatalog();
 }
 
-function toggleCatalogSort() {
-  catSort = catSort === 'asc' ? 'desc' : 'asc';
-  const btn = document.getElementById('catalog-sort');
-  btn.title = catSort === 'asc' ? 'Sort A–Z' : 'Sort Z–A';
-  btn.innerHTML = catSort === 'asc'
-    ? '<i class="ti ti-sort-ascending" aria-hidden="true"></i>'
-    : '<i class="ti ti-sort-descending" aria-hidden="true"></i>';
+function setCatalogSort(val) {
+  catSort = val;
   renderCatalog();
+}
+
+// "649.2K" / "118.7M" -> 649200 / 118700000 for the popularity sort
+function parsePulls(p) {
+  if (!p) return 0;
+  const m = String(p).trim().match(/^([\d.]+)([KMB])?$/i);
+  if (!m) return 0;
+  const n = parseFloat(m[1]);
+  const mult = { K: 1e3, M: 1e6, B: 1e9 }[(m[2] || '').toUpperCase()] || 1;
+  return Math.round(n * mult);
 }
 
 // Normalizes an ollama.com size badge ("7b", "335m", "8x22b", …) into a
@@ -2212,8 +2237,10 @@ function renderCatalog() {
   });
 
   filtered.sort((a, b) => {
+    if (catSort === 'popular') return parsePulls(b.pulls) - parsePulls(a.pulls);
+    if (catSort === 'newest') return (b.updatedAt || '').localeCompare(a.updatedAt || '');
     const cmp = a.name.localeCompare(b.name);
-    return catSort === 'asc' ? cmp : -cmp;
+    return catSort === 'za' ? -cmp : cmp;
   });
 
   document.getElementById('catalog-count').textContent = filtered.length + ' models';
@@ -2232,7 +2259,12 @@ function renderCatalog() {
         ${inst ? '<span class="installed-badge">installed</span>' : ''}
       </div>
       ${m.description ? `<div class="catalog-desc">${escHtml(m.description)}</div>` : ''}
-      <div class="catalog-badges">${renderCaps(m.capabilities)}${renderSizes(m.sizes)}</div>
+      <div class="catalog-badges">${renderCaps(m.capabilities)}${renderSizes(m.sizes, m.variants)}</div>
+      <div class="catalog-meta">
+        ${m.pulls ? `<span title="Pulls from ollama.com"><i class="ti ti-download" aria-hidden="true"></i>${escHtml(m.pulls)}</span>` : ''}
+        ${m.tagCount ? `<span title="Tags"><i class="ti ti-tag" aria-hidden="true"></i>${m.tagCount}</span>` : ''}
+        ${m.updatedText ? `<span title="${m.updatedAt ? escAttr(new Date(m.updatedAt).toLocaleString()) : 'Updated'}"><i class="ti ti-clock" aria-hidden="true"></i>${escHtml(m.updatedText)}</span>` : ''}
+      </div>
       <div style="display:flex;gap:8px;margin-top:4px">
         ${inst
           ? `<button class="btn btn-sm" style="flex:1" data-action="info" data-model="${escHtml(firstInstalled)}"><i class="ti ti-info-circle" aria-hidden="true"></i> Details</button>`
@@ -2249,10 +2281,9 @@ function renderCatalog() {
 function showTagPicker(name) {
   const m = catalogData.find(x => x.name === name);
   if (!m) return;
-  const sizes = m.sizes || [];
-  // isCloud comes straight from the model's own cloud badge on
-  // ollama.com/library now, so it's authoritative — no more guessing from
-  // capabilities as a proxy for "this is probably cloud-only".
+  // Index-derived chips for instant render; replaced by the real tag table
+  // once the detail scrape lands.
+  const sizes = [...(m.sizes || []), ...(m.variants || [])];
   const isCloud = m.isCloud;
   const tags = sizes.length > 0
     ? ['latest', ...sizes.filter(s => s !== 'latest'), ...(isCloud ? ['cloud'] : [])]
@@ -2311,17 +2342,50 @@ function showCatalogDetail(name) {
         ${inst ? '<span class="installed-badge">installed</span>' : ''}
         ${running ? '<span class="badge running">running</span>' : ''}
         ${!inst ? '<span class="badge">not installed</span>' : ''}
+        ${m.pulls ? `<span class="badge">↓ ${escHtml(m.pulls)} pulls</span>` : ''}
+        ${m.updatedText ? `<span class="badge">updated ${escHtml(m.updatedText)}</span>` : ''}
       </div>
       ${m.description ? '<p style="margin-bottom:16px;color:var(--text2)">' + escHtml(m.description) + '</p>' : ''}
       <div style="margin-bottom:8px;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Capabilities</div>
       <div style="margin-bottom:16px">${renderCaps(m.capabilities) || '<span style="color:var(--text3);font-size:12px">none</span>'}</div>
-      <div style="margin-bottom:8px;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Sizes</div>
-      <div style="margin-bottom:16px">${renderSizes(m.sizes) || '<span style="color:var(--text3);font-size:12px">various</span>'}</div>
+      <div id="catalog-detail-tags" style="margin-bottom:16px">
+        <div style="margin-bottom:8px;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Tags</div>
+        <div class="empty" style="padding:12px"><span class="spinner"></span> Loading tag list…</div>
+      </div>
       <a href="https://ollama.com/library/${encodeURIComponent(baseName(name))}" target="_blank" rel="noopener" class="btn btn-sm" style="display:inline-flex">
         <i class="ti ti-external-link" aria-hidden="true"></i> View on ollama.com
       </a>
     </div>`;
   openModal(name, content, { rich: true, focus: true });
+  loadCatalogDetailTags(name);
+}
+
+// Lazy-loads the on-demand scraped detail endpoint and replaces the spinner
+// with the real tag table (size/context/input per tag). Falls back to the
+// index-derived size chips when the detail scrape fails.
+async function loadCatalogDetailTags(name) {
+  const box = document.getElementById('catalog-detail-tags');
+  if (!box) return;
+  const m = catalogData.find(x => x.name === name);
+  const fallback = `<div style="margin-bottom:8px;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Sizes</div>
+    <div>${renderSizes(m?.sizes, m?.variants) || '<span style="color:var(--text3);font-size:12px">various</span>'}</div>`;
+  try {
+    const r = await api('/api/catalog/library/' + encodeURIComponent(name));
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    if (!document.getElementById('catalog-detail-tags')) return; // modal already closed/replaced
+    if (!d.tags || d.tags.length === 0) { box.innerHTML = fallback; return; }
+    box.innerHTML =
+      `<div style="margin-bottom:8px;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Tags (${d.tags.length}${d.stale ? ' · cached' : ''})</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Tag</th><th>Size</th><th>Context</th><th>Input</th></tr></thead>
+        <tbody>${d.tags.map(t =>
+          `<tr><td style="font-family:var(--mono);font-size:12px">${escHtml(name)}:${escHtml(t.name)}</td><td>${escHtml(t.size || '—')}</td><td>${escHtml(t.context || '—')}</td><td>${escHtml(t.input || '—')}</td></tr>`
+        ).join('')}</tbody>
+      </table></div>`;
+  } catch(_) {
+    if (document.getElementById('catalog-detail-tags')) box.innerHTML = fallback;
+  }
 }
 
 function closeModal(e) {
@@ -2405,7 +2469,11 @@ function skeletonTableRows(n = 3) {
 function baseName(n) { return n.split(':')[0]; }
 
 function renderCaps(caps) { return (caps || []).map(c => `<span class="cap-badge cap-${c}">${c}</span>`).join(''); }
-function renderSizes(sizes) { return (sizes || []).map(s => `<span class="size-badge">${s}</span>`).join(''); }
+function renderSizes(sizes, variants) {
+  const s = (sizes || []).map(x => `<span class="size-badge">${x}</span>`).join('');
+  const v = (variants || []).map(x => `<span class="size-badge variant" title="Named variant, not a parameter count">${x}</span>`).join('');
+  return s + v;
+}
 
 let modalTrigger = null;
 

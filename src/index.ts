@@ -8,7 +8,14 @@ import {
   tokenExpiry,
   verifySessionToken,
 } from "./auth";
-import { type LibraryModel, parseLibraryHtml } from "./library";
+import {
+  dedupeByName,
+  hasNextSearchPage,
+  type LibraryModel,
+  type LibraryModelDetail,
+  parseLibraryDetailHtml,
+  parseLibraryHtml,
+} from "./library";
 
 const MASTER_KEY = (process.env.MASTER_KEY || "").trim();
 const OLLAMA_HOST = (process.env.OLLAMA_HOST || "http://localhost:11434").replace(/\/$/, "");
@@ -254,6 +261,59 @@ let libraryCacheTime = 0;
 const LIBRARY_TTL = 3600_000;
 let libraryInflight: Promise<LibraryModel[]> | null = null;
 
+const SCRAPE_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+};
+
+type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
+
+/** Dedupes consecutive pages only — returns false as soon as a page repeats cards. */
+async function scrapeSearchFallback(fetchFn: FetchFn): Promise<LibraryModel[]> {
+  const all: LibraryModel[] = [];
+  let lastCount = 0;
+
+  // /search serves 20 cards per page and signals the next page via an HTMX
+  // hx-get="?page=N+1" marker; a missing marker means we've reached the end.
+  for (let page = 1; page <= 50; page++) {
+    const resp = await fetchFn(`https://ollama.com/search?page=${page}`, {
+      headers: { ...SCRAPE_HEADERS, "HX-Request": "true" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!resp.ok) throw new Error(`search page ${page}: HTTP ${resp.status}`);
+
+    const html = await resp.text();
+    all.push(...parseLibraryHtml(html));
+
+    const deduped = dedupeByName(all);
+    if (deduped.length <= lastCount) break; // page repeated cards — done
+    lastCount = deduped.length;
+    if (!hasNextSearchPage(html, page)) break;
+  }
+
+  return dedupeByName(all);
+}
+
+export async function scrapeLibraryWithFallback(fetchFn: FetchFn = fetch): Promise<LibraryModel[]> {
+  const resp = await fetchFn("https://ollama.com/library", {
+    headers: SCRAPE_HEADERS,
+    credentials: "omit",
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+  const models = parseLibraryHtml(await resp.text());
+  if (models.length > 0) return models;
+
+  // /library parsed to zero — the page markup moved. Fall back to the second
+  // template (/search, HTMX-paginated) before treating this as a scrape failure.
+  log("warn", "/library parsed 0 models, falling back to /search pagination");
+  const fallback = await scrapeSearchFallback(fetchFn);
+  if (fallback.length === 0) {
+    throw new Error("Parsed 0 models from both /library and /search — selectors are stale");
+  }
+  return fallback;
+}
+
 async function _scrapeLibrary(): Promise<LibraryModel[]> {
   const maxRetries = 3;
   let lastErr: unknown;
@@ -266,17 +326,7 @@ async function _scrapeLibrary(): Promise<LibraryModel[]> {
     }
 
     try {
-      const resp = await fetch("https://ollama.com/library", {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-        },
-        credentials: "omit",
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
-      const html = await resp.text();
-      const models = parseLibraryHtml(html);
+      const models = await scrapeLibraryWithFallback();
 
       // A structurally successful fetch that parses to zero models means the
       // upstream markup moved out from under our selectors — that's a scrape
@@ -327,6 +377,59 @@ async function serveLibrary(): Promise<Response> {
   } catch (err) {
     log("error", "Failed to serve library catalog", { error: String(err) });
     return jsonError("Failed to fetch library catalog");
+  }
+}
+
+// Per-model detail pages (real tag list with size/context/input) are scraped
+// on demand — they change far less often than the index, so a longer TTL and
+// one cached entry per model name keeps ollama.com load trivial.
+const detailCache = new Map<string, { data: LibraryModelDetail; time: number }>();
+const DETAIL_TTL = 6 * 3600_000; // 6 hours
+const detailInflight = new Map<string, Promise<LibraryModelDetail>>();
+
+async function _scrapeDetail(name: string): Promise<LibraryModelDetail> {
+  const resp = await fetch(`https://ollama.com/library/${name}`, {
+    headers: SCRAPE_HEADERS,
+    credentials: "omit",
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (resp.status === 404) throw new Error("Model not found in registry");
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+  const detail = parseLibraryDetailHtml(await resp.text(), name);
+  if (detail.tags.length === 0 && !detail.pulls) {
+    throw new Error("Detail page parsed empty — selectors may be stale");
+  }
+  detailCache.set(name, { data: detail, time: Date.now() });
+  return detail;
+}
+
+export async function fetchLibraryDetail(name: string): Promise<LibraryModelDetail> {
+  const cached = detailCache.get(name);
+  if (cached && Date.now() - cached.time < DETAIL_TTL) return cached.data;
+
+  let inflight = detailInflight.get(name);
+  if (!inflight) {
+    inflight = _scrapeDetail(name).finally(() => detailInflight.delete(name));
+    detailInflight.set(name, inflight);
+  }
+  return inflight;
+}
+
+async function serveLibraryDetail(name: string): Promise<Response> {
+  try {
+    const detail = await fetchLibraryDetail(name);
+    const cached = detailCache.get(name);
+    const fresh = cached ? Date.now() - cached.time < 5000 : false;
+    return Response.json({ ...detail, cached: fresh });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log("warn", "Library detail scrape failed", { name, error: msg });
+    if (msg === "Model not found in registry") return jsonError(msg, 404);
+    // Serve a stale cache entry if we have one before giving up entirely.
+    const stale = detailCache.get(name);
+    if (stale) return Response.json({ ...stale.data, stale: true });
+    return jsonError("Failed to fetch model details");
   }
 }
 
@@ -667,8 +770,27 @@ const OPENAPI_SPEC = {
                           name: { type: "string" },
                           description: { type: "string" },
                           capabilities: { type: "array", items: { type: "string" } },
-                          sizes: { type: "array", items: { type: "string" } },
+                          sizes: {
+                            type: "array",
+                            items: { type: "string" },
+                            description: 'Parameter-size badges, e.g. "7b", "8x22b"',
+                          },
+                          variants: {
+                            type: "array",
+                            items: { type: "string" },
+                            description:
+                              'Non-param size-slot badges, e.g. Gemma\'s "e2b"/"e4b" — kept separate from sizes so size filters stay correct',
+                          },
                           isCloud: { type: "boolean" },
+                          pulls: { type: "string", example: "649.2K" },
+                          tagCount: { type: "number" },
+                          updatedText: { type: "string", example: "1 week ago" },
+                          updatedAt: {
+                            type: "string",
+                            nullable: true,
+                            format: "date-time",
+                            description: 'Parsed from the updated span title="… UTC"',
+                          },
                         },
                       },
                     },
@@ -686,6 +808,56 @@ const OPENAPI_SPEC = {
               },
             },
           },
+        },
+      },
+    },
+    "/api/catalog/library/{name}": {
+      get: {
+        summary: "Registry model detail",
+        description:
+          "On-demand scrape of ollama.com/library/<name>: the real tag list with per-tag download size, context window and input type. Cached in memory for 6h per model name.",
+        tags: ["Catalog"],
+        parameters: [
+          {
+            name: "name",
+            in: "path",
+            required: true,
+            schema: { type: "string", pattern: "^[a-z0-9][a-z0-9._-]*$" },
+          },
+        ],
+        responses: {
+          200: {
+            description: "Model detail",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    name: { type: "string" },
+                    tags: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          name: { type: "string", example: "8b" },
+                          size: { type: "string", example: "4.9GB" },
+                          context: { type: "string", example: "128K" },
+                          input: { type: "string", example: "Text" },
+                        },
+                      },
+                    },
+                    pulls: { type: "string", example: "118.7M" },
+                    updatedText: { type: "string" },
+                    updatedAt: { type: "string", nullable: true, format: "date-time" },
+                    cached: { type: "boolean" },
+                    stale: { type: "boolean" },
+                  },
+                },
+              },
+            },
+          },
+          404: { description: "Model not found in registry" },
+          502: { description: "Detail scrape failed" },
         },
       },
     },
@@ -970,6 +1142,12 @@ async function handleRequest(req: Request, server: Bun.Server<undefined>): Promi
   // API routes
   if (url.pathname === "/api/catalog/library") {
     return serveLibrary();
+  }
+
+  // On-demand per-model registry detail (tag table with size/context/input)
+  const detailMatch = url.pathname.match(/^\/api\/catalog\/library\/([a-z0-9][a-z0-9._-]*)$/);
+  if (detailMatch?.[1] && req.method === "GET") {
+    return serveLibraryDetail(detailMatch[1]);
   }
 
   // LiteLLM sync status

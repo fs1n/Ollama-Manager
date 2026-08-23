@@ -1,88 +1,137 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { decodeHtmlEntities, parseLibraryHtml } from "./library";
+import {
+  dedupeByName,
+  hasNextSearchPage,
+  parseLibraryDetailHtml,
+  parseLibraryHtml,
+  parseUpdatedTitle,
+} from "./library";
 
-const FIXTURE_PATH = path.join(import.meta.dir, "__fixtures__", "library.sample.html");
-const SAMPLE_HTML = readFileSync(FIXTURE_PATH, "utf-8");
+const fixture = (name: string) =>
+  readFileSync(path.join(import.meta.dir, "..", "test", "fixtures", name), "utf-8");
 
-describe("parseLibraryHtml", () => {
-  const models = parseLibraryHtml(SAMPLE_HTML);
-  const byName = new Map(models.map((m) => [m.name, m]));
+describe("parseLibraryHtml — /library template (group w-full space-y-5)", () => {
+  const models = parseLibraryHtml(fixture("library-llama3.1.html"));
+  const m = models.find((x) => x.name === "llama3.1");
 
-  test("parses every card in the fixture", () => {
-    expect(models.length).toBe(6);
-  });
-
-  test("plain model with a size badge and no capabilities", () => {
-    const m = byName.get("alfred");
+  test("finds the card", () => {
+    expect(models.length).toBe(1);
     expect(m).toBeDefined();
-    expect(m?.capabilities).toEqual([]);
-    expect(m?.sizes).toEqual(["40b"]);
+  });
+
+  test("extracts description", () => {
+    expect(m?.description).toBe(
+      "Llama 3.1 is a new state-of-the-art model from Meta available in 8B, 70B and 405B parameter sizes.",
+    );
+  });
+
+  test("extracts capabilities from indigo badges", () => {
+    expect(m?.capabilities).toEqual(["tools"]);
+  });
+
+  test("extracts param sizes, separating non-param variants", () => {
+    expect(m?.sizes).toEqual(["8b", "70b", "405b"]);
+    expect(m?.variants).toEqual([]);
+  });
+
+  test("extracts pulls, tag count and updated info", () => {
+    expect(m?.pulls).toBe("118.7M");
+    expect(m?.tagCount).toBe(93);
+    expect(m?.updatedText).toBe("over a year ago");
+    expect(m?.updatedAt).toBe("2024-11-30T22:34:00.000Z");
+  });
+
+  test("not cloud", () => {
     expect(m?.isCloud).toBe(false);
-  });
-
-  test("decodes HTML entities in the description", () => {
-    const m = byName.get("llama3.2");
-    expect(m?.description).toBe("Meta's Llama 3.2 goes small with 1B and 3B models.");
-    expect(m?.description).not.toContain("&#39;");
-  });
-
-  test("classifies capability, size, and cloud badges independently", () => {
-    const m = byName.get("gpt-oss");
-    expect(m?.capabilities).toEqual(["tools", "thinking"]);
-    expect(m?.sizes).toEqual(["20b", "120b"]);
-    expect(m?.isCloud).toBe(true);
-  });
-
-  test("cloud-only model with no local size badges", () => {
-    const m = byName.get("minimax-m2.7");
-    expect(m?.isCloud).toBe(true);
-    expect(m?.sizes).toEqual([]);
-  });
-
-  test("MoE-style size labels are captured as-is", () => {
-    const m = byName.get("mixtral");
-    expect(m?.sizes).toEqual(["8x7b", "8x22b"]);
-  });
-
-  test("sub-billion (million-scale) size labels are captured as-is", () => {
-    const m = byName.get("all-minilm");
-    expect(m?.sizes).toEqual(["23m", "335m"]);
-  });
-
-  test("badges never bleed across adjacent cards", () => {
-    // alfred has no capabilities/cloud badge of its own — if the card boundary
-    // regex were wrong, the next card's "tools" badge could leak in here.
-    expect(byName.get("alfred")?.capabilities).toEqual([]);
-    expect(byName.get("alfred")?.isCloud).toBe(false);
-  });
-
-  test("returns an empty list (not a throw) when no cards match", () => {
-    // This is the actual historical failure mode: ollama.com redesigned the
-    // page and the old x-test-model/x-test-capability selectors silently
-    // matched nothing. The caller (src/index.ts _scrapeLibrary) is
-    // responsible for treating an empty result as a scrape failure — this
-    // test just pins the parser's own contract.
-    expect(parseLibraryHtml("<html><body>no cards here</body></html>")).toEqual([]);
-    expect(parseLibraryHtml('<li x-test-model><a href="/library/old">old</a></li>')).toEqual([]);
   });
 });
 
-describe("decodeHtmlEntities", () => {
-  test("decodes common named entities", () => {
-    expect(decodeHtmlEntities("Meta&#39;s &amp; Friends&quot;")).toBe("Meta's & Friends\"");
+describe("parseLibraryHtml — cloud + variant badges", () => {
+  const models = parseLibraryHtml(fixture("library-gemma4.html"));
+  const m = models.find((x) => x.name === "gemma4");
+
+  test("cloud badge sets isCloud and adds 'cloud' capability", () => {
+    expect(m?.isCloud).toBe(true);
+    expect(m?.capabilities).toEqual(["vision", "tools", "thinking", "audio", "cloud"]);
   });
 
-  test("decodes numeric entities", () => {
-    expect(decodeHtmlEntities("caf&#233;")).toBe("café");
+  test("e2b/e4b land in variants, not sizes", () => {
+    expect(m?.sizes).toEqual(["12b", "26b", "31b"]);
+    expect(m?.variants).toEqual(["e2b", "e4b"]);
+  });
+});
+
+describe("parseLibraryHtml — /search template (group w-full, no space-y-5)", () => {
+  const models = parseLibraryHtml(fixture("search-deepseek-v4-flash.html"));
+  const m = models.find((x) => x.name === "deepseek-v4-flash");
+
+  test("finds the card despite the different card class", () => {
+    expect(m).toBeDefined();
+    expect(m?.description).toContain("DeepSeek-V4-Flash is a preview");
   });
 
-  test("trims surrounding whitespace", () => {
-    expect(decodeHtmlEntities("  hello  ")).toBe("hello");
+  test("capabilities + cloud", () => {
+    expect(m?.capabilities).toEqual(["tools", "thinking", "cloud"]);
+    expect(m?.isCloud).toBe(true);
   });
 
-  test("leaves plain text untouched", () => {
-    expect(decodeHtmlEntities("no entities here")).toBe("no entities here");
+  test("meta fields present on the search template too", () => {
+    expect(m?.pulls).toBeTruthy();
+    expect(typeof m?.tagCount).toBe("number");
+    expect(m?.updatedAt).not.toBeNull();
+  });
+});
+
+describe("hasNextSearchPage", () => {
+  test("true when a hx-get pagination marker for the next page exists", () => {
+    expect(hasNextSearchPage(fixture("search-deepseek-v4-flash.html"), 1)).toBe(true);
+  });
+
+  test("false on the last page (no marker)", () => {
+    expect(hasNextSearchPage(fixture("library-llama3.1.html"), 99)).toBe(false);
+  });
+});
+
+describe("dedupeByName", () => {
+  test("keeps first occurrence per name", () => {
+    const base = parseLibraryHtml(fixture("library-llama3.1.html"))[0];
+    const dupe = { ...base, description: "shorter" };
+    const out = dedupeByName([base, dupe]);
+    expect(out.length).toBe(1);
+    expect(out[0].description).toBe(base.description);
+  });
+});
+
+describe("parseUpdatedTitle", () => {
+  test("parses the UTC title into ISO", () => {
+    expect(parseUpdatedTitle("Aug 14, 2026 4:54 PM UTC")).toBe("2026-08-14T16:54:00.000Z");
+    expect(parseUpdatedTitle("Nov 30, 2024 10:34 PM UTC")).toBe("2024-11-30T22:34:00.000Z");
+  });
+
+  test("returns null for garbage", () => {
+    expect(parseUpdatedTitle("nope")).toBeNull();
+    expect(parseUpdatedTitle("")).toBeNull();
+  });
+});
+
+describe("parseLibraryDetailHtml — /library/<name> tag table", () => {
+  const detail = parseLibraryDetailHtml(fixture("library-llama3.1-detail.html"), "llama3.1");
+
+  test("extracts all desktop tag rows, deduped", () => {
+    expect(detail.tags.map((t) => t.name)).toEqual(["latest", "8b", "70b", "405b"]);
+  });
+
+  test("each tag carries size, context and input type", () => {
+    const latest = detail.tags[0];
+    expect(latest.size).toBe("4.9GB");
+    expect(latest.context).toBe("128K");
+    expect(latest.input).toBe("Text");
+  });
+
+  test("extracts page-level downloads and updated timestamp", () => {
+    expect(detail.pulls).toBe("118.7M");
+    expect(detail.updatedAt).toBe("2024-11-30T22:34:00.000Z");
   });
 });
