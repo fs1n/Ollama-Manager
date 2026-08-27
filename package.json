@@ -1,7 +1,7 @@
 {
   "name": "ollama-manager",
-  "version": "0.2.0",
-  "description": "Web UI for managing Ollama instances — Bun backend + vanilla frontend",
+  "version": "0.2.3",
+  "description": "Web UI for managing Ollama models, with automatic LiteLLM model sync",
   "type": "module",
   "scripts": {
     "dev": "bun run --watch src/index.ts",

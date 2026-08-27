@@ -1,7 +1,7 @@
 # Ollama Manager
 [![Docker Image CI](https://github.com/fs1n/Ollama-Manager/actions/workflows/docker-image.yml/badge.svg)](https://github.com/fs1n/Ollama-Manager/actions/workflows/docker-image.yml)
 
-A lightweight web UI for managing an [Ollama](https://ollama.com) instance.
+Web UI for managing [Ollama](https://ollama.com) models, with automatic [LiteLLM](https://www.litellm.ai/) model sync
 
 Features:
 - Browse the Ollama registry catalog and pull models
@@ -73,11 +73,18 @@ Requires Ollama running at `OLLAMA_HOST` (defaults to `http://localhost:11434`).
 |----------|----------|-------------|
 | `OLLAMA_HOST` | No | Ollama API endpoint (default: `http://localhost:11434`) |
 | `PORT` | No | HTTP server port (default: `3000`) (very optional, DONOT CHANGE WITHOUT AN ACTUAL NEED) |
-| `MASTER_KEY` | No | If set, requires login before accessing the UI |
-| `TRUST_PROXY` | No | Set to `1`/`true` **only** if a reverse proxy in front of this instance overwrites `X-Forwarded-For` — otherwise the login rate limiter uses the real socket address (default: unset) |
+| `MASTER_KEY` | No | No, but consider Setting it for security |
+| `TRUST_PROXY` | No | Set to `1`/`true` **only** if a reverse proxy in front of this instance overwrites `X-Forwarded-For` - otherwise the login rate limiter uses the real socket address (default: unset) |
 | `LITELLM_URL` | No | Point to LiteLLM base-URL |
 | `LITELLM_KEY` | No | Your LiteLLM Masterkey |
 | `LITELLM_SYNC_INTERVAL` | No | Sync interval in minutes |
+
+## Disclaimer
+
+This is an independent project. It is not affiliated with,
+endorsed by, or sponsored by Ollama or Ollama Inc. "Ollama" is used here only
+to describe what this tool works with. All trademarks belong to their
+respective owners.
 
 ## License
 
