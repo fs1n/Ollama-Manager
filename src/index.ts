@@ -35,7 +35,8 @@ const LITELLM_KEY = (process.env.LITELLM_KEY || "").trim();
 const LITELLM_SYNC_INTERVAL = parseInt(process.env.LITELLM_SYNC_INTERVAL || "30", 10);
 const LITELLM_ENABLED = !!(LITELLM_URL && LITELLM_KEY);
 
-const STATIC_HTML = readFileSync(path.join(import.meta.dir, "..", "public", "index.html"), "utf-8");
+const PUBLIC_DIR = path.join(import.meta.dir, "..", "public");
+const STATIC_HTML = readFileSync(path.join(PUBLIC_DIR, "index.html"), "utf-8");
 
 const VERSION =
   process.env.OLLAMA_MANAGER_VERSION ||
@@ -1127,6 +1128,17 @@ async function handleRequest(req: Request, server: Bun.Server<undefined>): Promi
 
   // Static files (public — frontend handles login UI)
   if (url.pathname === "/" || !url.pathname.startsWith("/api/")) {
+    // Serve real sub-resources (CSS/JS/images under public/) as-is; anything
+    // else falls through to the SPA shell below, same as today.
+    if (url.pathname !== "/") {
+      const filePath = path.join(PUBLIC_DIR, decodeURIComponent(url.pathname));
+      if (filePath.startsWith(`${PUBLIC_DIR}${path.sep}`)) {
+        const file = Bun.file(filePath);
+        if (await file.exists()) {
+          return new Response(file, { headers: { "Cache-Control": "no-store" } });
+        }
+      }
+    }
     return new Response(STATIC_HTML, {
       headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
     });

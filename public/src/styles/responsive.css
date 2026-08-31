@@ -1,0 +1,218 @@
+/* ============================================================
+   Tablet: max-width 1024px
+   ============================================================ */
+@media (max-width: 1024px) {
+  main {
+    padding: 20px 24px;
+  }
+  .form-row.cols3 {
+    grid-template-columns: 1fr 1fr;
+  }
+  .model-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
+  .catalog-grid {
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  }
+  .info-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+  .page-title {
+    font-size: 18px;
+  }
+  .page-sub {
+    font-size: 12px;
+  }
+  #toast-container {
+    right: 16px;
+    bottom: 16px;
+  }
+  .toast {
+    min-width: 180px;
+    font-size: 12px;
+  }
+  .modal {
+    width: 90vw;
+  }
+}
+
+/* ============================================================
+   Mobile: max-width 640px
+   ============================================================ */
+@media (max-width: 640px) {
+  body {
+    grid-template-columns: 1fr;
+    grid-template-rows: 50px auto 1fr;
+    grid-template-areas: "header" "nav" "main";
+  }
+  header {
+    padding: 0 12px;
+    gap: 10px;
+  }
+  .logo {
+    font-size: 14px;
+    gap: 6px;
+  }
+  .status-badge {
+    font-size: 10px;
+    padding: 3px 8px;
+    gap: 4px;
+  }
+  .status-dot {
+    width: 5px;
+    height: 5px;
+  }
+  nav {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 6px 8px;
+    gap: 2px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  nav::-webkit-scrollbar {
+    display: none;
+  }
+  .nav-scroll {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 2px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .nav-scroll::-webkit-scrollbar {
+    display: none;
+  }
+  .nav-section {
+    display: none;
+  }
+  .nav-item {
+    flex-shrink: 0;
+    padding: 7px 12px;
+    font-size: 12px;
+    border-left: none;
+    border-bottom: 2px solid transparent;
+    border-radius: var(--radius);
+    gap: 6px;
+  }
+  .nav-item i {
+    font-size: 14px;
+  }
+  .nav-item.active {
+    border-left-color: transparent;
+    border-bottom-color: var(--accent);
+    background: rgba(200, 240, 96, 0.06);
+  }
+  main {
+    padding: 16px 12px;
+  }
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .page-title {
+    font-size: 17px;
+  }
+  .page-sub {
+    font-size: 12px;
+    margin-top: 0;
+  }
+  .page-header > .btn,
+  .page-header > div:last-child {
+    width: 100%;
+  }
+  .page-header > div:last-child .btn {
+    width: 100%;
+  }
+  .form-row.cols2,
+  .form-row.cols3 {
+    grid-template-columns: 1fr;
+  }
+  .card {
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .model-grid {
+    grid-template-columns: 1fr;
+  }
+  .catalog-grid {
+    grid-template-columns: 1fr;
+  }
+  .info-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .chat-messages {
+    max-height: 280px;
+    min-height: 180px;
+    padding: 12px;
+  }
+  .chat-input-row {
+    flex-direction: column;
+  }
+  .chat-input-row textarea {
+    min-height: 50px;
+  }
+  .msg-content {
+    max-width: 95%;
+  }
+  th,
+  td {
+    padding: 8px;
+    font-size: 11px;
+  }
+  td:first-child {
+    font-size: 11px;
+  }
+  #toast-container {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    gap: 6px;
+  }
+  .toast {
+    min-width: 0;
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+  .modal {
+    width: 95vw;
+    max-width: none;
+    padding: 16px;
+    max-height: 85vh;
+  }
+  .modal-title {
+    font-size: 14px;
+  }
+  .btn {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+  .btn i {
+    font-size: 13px;
+  }
+  #catalog-search {
+    width: 100% !important;
+    max-width: none;
+  }
+  #catalog-cap-filters,
+  #catalog-view-toggle {
+    gap: 4px;
+  }
+  .cat-cap,
+  .cat-view {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+}
