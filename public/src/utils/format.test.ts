@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { escAttr, escHtml, fmtSize, parseModelSize, parsePulls } from "./format";
+import { baseName, escAttr, escHtml, fmtSize, parseModelSize, parsePulls } from "./format";
 
 describe("fmtSize", () => {
   test("formats GB/MB/KB thresholds", () => {
@@ -49,6 +49,16 @@ describe("escHtml", () => {
     expect(escHtml(`<img onerror="x" src='y'>&`)).toBe(
       "&lt;img onerror=&quot;x&quot; src=&#39;y&#39;&gt;&amp;",
     );
+  });
+});
+
+describe("baseName", () => {
+  test("strips the tag from a name:tag pair", () => {
+    expect(baseName("llama3.2:1b")).toBe("llama3.2");
+  });
+
+  test("returns the name unchanged when there is no tag", () => {
+    expect(baseName("llama3.2")).toBe("llama3.2");
   });
 });
 

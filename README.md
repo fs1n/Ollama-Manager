@@ -67,6 +67,13 @@ bun run dev
 
 Requires Ollama running at `OLLAMA_HOST` (defaults to `http://localhost:11434`).
 
+The frontend (`public/index.html` + `public/src/**`) is bundled by Bun into
+`dist/public/` — `bun run dev`/`bun run start` build it automatically first.
+If you edit frontend files while `bun run dev` is already running, rebuild in
+another terminal with `bun run dev:web` (watches and rebuilds on change) or a
+one-off `bun run build:web`. `bun test` doesn't go through `bun run`, so run
+`bun run build:web` once beforehand if `dist/public` doesn't exist yet.
+
 ### Environment variables
 
 | Variable | Required | Description |

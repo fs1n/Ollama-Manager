@@ -28,5 +28,8 @@ jobs:
       - name: Type check (frontend)
         run: bunx tsc --noEmit -p public/tsconfig.json
 
+      - name: Build frontend
+        run: bun run build:web
+
       - name: Test
         run: bun test

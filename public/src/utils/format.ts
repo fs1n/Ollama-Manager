@@ -52,6 +52,10 @@ export function escHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+export function baseName(name: string): string {
+  return name.split(":")[0];
+}
+
 export function escAttr(s: string): string {
   return s
     .replace(/&/g, "&amp;")
