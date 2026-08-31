@@ -9,6 +9,10 @@ const fixture = (name: string) =>
 const htmlResponse = (body: string) =>
   new Response(body, { status: 200, headers: { "Content-Type": "text/html" } });
 
+// Several tests below deliberately make /library parse to 0 models to
+// exercise the /search fallback path — that's expected to log a "/library
+// parsed 0 models, falling back to /search pagination" warning each time
+// (see scrapeLibraryWithFallback in ./index.ts), not a sign anything failed.
 describe("scrapeLibraryWithFallback", () => {
   test("returns /library models without touching /search", async () => {
     const fetchFn = mock((url: string) => {

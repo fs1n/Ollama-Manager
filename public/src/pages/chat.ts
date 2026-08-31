@@ -92,6 +92,16 @@ async function sendChat(): Promise<void> {
         }
         full += ev.message.content;
         contentEl.appendChild(document.createTextNode(ev.message.content));
+      } else if (ev.message?.thinking && firstChunk) {
+        // Reasoning models (e.g. Qwen3, thinking-enabled Llama variants) can
+        // stream a while on message.thinking before any message.content
+        // arrives — without this the typing indicator just sits there with
+        // no sign the model is doing anything. Preview the thinking trace
+        // instead, but don't fold it into `full`/chatHistory: it's not the
+        // answer, and the model wasn't asked to see its own prior reasoning
+        // replayed back to it on the next turn. Cleared the moment real
+        // content starts (the `firstChunk` branch above resets textContent).
+        contentEl.appendChild(document.createTextNode(ev.message.thinking));
       }
       msgBox.scrollTop = msgBox.scrollHeight;
     }

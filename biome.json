@@ -13,6 +13,17 @@
       }
     }
   },
+  "overrides": [
+    {
+      "includes": ["public/src/styles/reset.css", "public/src/styles/responsive.css"],
+      "linter": {
+        "rules": {
+          "complexity": { "noImportantStyles": "off" },
+          "style": { "noDescendingSpecificity": "off" }
+        }
+      }
+    }
+  ],
   "formatter": {
     "enabled": true,
     "indentStyle": "space",

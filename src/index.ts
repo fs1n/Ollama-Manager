@@ -225,6 +225,10 @@ async function forwardToOllama(req: Request): Promise<Response> {
   // and Ollama's OLLAMA_ORIGINS check would reject a non-localhost Origin.
   headers.delete("origin");
   headers.delete("referer");
+  // Ollama has no use for the manager's own session cookie — forwarding it
+  // upstream would leak the (httpOnly, otherwise browser-inaccessible)
+  // om_session token to a service that never needs to see it.
+  headers.delete("cookie");
 
   const upstreamAbort = new AbortController();
   let connectTimedOut = false;

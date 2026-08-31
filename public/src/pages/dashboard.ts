@@ -21,7 +21,13 @@ export async function loadAppVersion(): Promise<void> {
     const d = await r.json();
     if (d.version) {
       const el = document.getElementById("version-badge") as HTMLElement;
-      el.textContent = d.version === "dev" ? "dev" : `v${d.version}`;
+      // Unlike Ollama's own version (shown in the header status badge), this
+      // is OLLAMA_MANAGER_VERSION — an arbitrary build-time string, not
+      // necessarily semver (e.g. a CI run might set it to a branch/PR name).
+      // Label it explicitly instead of guessing a "v" prefix onto it, so it
+      // reads clearly next to Ollama's own "vX.Y.Z" badge instead of looking
+      // like a second, differently-formatted version number.
+      el.textContent = `Manager: ${d.version}`;
     }
   } catch {
     // version badge just stays blank — not worth surfacing an error for
