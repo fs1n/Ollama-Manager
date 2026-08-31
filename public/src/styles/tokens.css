@@ -1,0 +1,21 @@
+:root {
+  --bg: #0f0f0f;
+  --bg2: #161616;
+  --bg3: #1e1e1e;
+  --bg4: #262626;
+  --border: rgba(255, 255, 255, 0.08);
+  --border2: rgba(255, 255, 255, 0.14);
+  --text: #e8e6e0;
+  --text2: #8a8780;
+  --text3: #7d7b76;
+  --accent: #c8f060;
+  --accent2: #a8d040;
+  --danger: #ff5555;
+  --warning: #ffaa33;
+  --info: #55aaff;
+  --success: #55cc88;
+  --mono: "JetBrains Mono", monospace;
+  --sans: "Syne", sans-serif;
+  --radius: 8px;
+  --radius-lg: 12px;
+}

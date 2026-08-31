@@ -35,7 +35,14 @@ const LITELLM_KEY = (process.env.LITELLM_KEY || "").trim();
 const LITELLM_SYNC_INTERVAL = parseInt(process.env.LITELLM_SYNC_INTERVAL || "30", 10);
 const LITELLM_ENABLED = !!(LITELLM_URL && LITELLM_KEY);
 
-const STATIC_HTML = readFileSync(path.join(import.meta.dir, "..", "public", "index.html"), "utf-8");
+// Built by `bun run build:web` (bun build public/index.html --outdir dist/public):
+// the authored public/index.html references TS/CSS module sources directly,
+// which browsers can't run — the build step transpiles/bundles them and
+// rewrites the HTML to point at hashed output files. `predev`/`prestart`
+// package.json hooks run the build automatically; `bun test` does not go
+// through `bun run`, so CI and local test runs must build this first too.
+const PUBLIC_DIR = path.join(import.meta.dir, "..", "dist", "public");
+const STATIC_HTML = readFileSync(path.join(PUBLIC_DIR, "index.html"), "utf-8");
 
 const VERSION =
   process.env.OLLAMA_MANAGER_VERSION ||
@@ -218,6 +225,10 @@ async function forwardToOllama(req: Request): Promise<Response> {
   // and Ollama's OLLAMA_ORIGINS check would reject a non-localhost Origin.
   headers.delete("origin");
   headers.delete("referer");
+  // Ollama has no use for the manager's own session cookie — forwarding it
+  // upstream would leak the (httpOnly, otherwise browser-inaccessible)
+  // om_session token to a service that never needs to see it.
+  headers.delete("cookie");
 
   const upstreamAbort = new AbortController();
   let connectTimedOut = false;
@@ -971,20 +982,21 @@ const SWAGGER_HTML = `<!DOCTYPE html>
 </body>
 </html>`;
 
-// Security headers applied to every outgoing response.
-//
-// script-src/style-src still need 'unsafe-inline': the frontend is a single
-// static HTML file that relies on inline onclick="…" handlers and inline
-// style="…" attributes throughout, so this CSP does not by itself stop
-// inline-handler execution — that's handled by escaping model output before
-// it reaches innerHTML (see renderMarkdown() in public/index.html). What it
-// does provide: no script/style/font/connect can load from an origin outside
-// this explicit allowlist, and the page can't be framed — both real
-// mitigations against exfiltration and clickjacking, on top of that fix.
-const CONTENT_SECURITY_POLICY = [
+// Security headers applied to every outgoing response. Two separate policies:
+// the app no longer has any inline scripts or event-handler attributes (the
+// frontend is now real ES modules loaded via <script type="module" src=…>,
+// see public/src/), so its script-src can drop 'unsafe-inline' and the
+// unpkg.com allowance entirely — that CDN is only ever used by Swagger UI's
+// standalone HTML at /api/docs, which keeps its own, separately-scoped policy
+// (including 'unsafe-inline' for the small inline SwaggerUIBundle(...) init
+// script it renders). style-src still needs 'unsafe-inline' for the app: it
+// has plenty of inline style="…" attributes left (a separate follow-up, not
+// part of this change) that aren't script-executable, so that's a much
+// smaller residual allowance than the inline-script one this closes.
+const APP_CSP = [
   "default-src 'self'",
-  "script-src 'self' https://unpkg.com 'unsafe-inline'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net https://unpkg.com",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
   "font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net data:",
   "img-src 'self' data:",
   "connect-src 'self'",
@@ -993,8 +1005,20 @@ const CONTENT_SECURITY_POLICY = [
   "form-action 'self'",
 ].join("; ");
 
-function withSecurityHeaders(resp: Response): Response {
-  resp.headers.set("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+const DOCS_CSP = [
+  "default-src 'self'",
+  "script-src 'self' https://unpkg.com 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline' https://unpkg.com",
+  "font-src 'self' data:",
+  "img-src 'self' data:",
+  "connect-src 'self'",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
+
+function withSecurityHeaders(resp: Response, csp: string = APP_CSP): Response {
+  resp.headers.set("Content-Security-Policy", csp);
   resp.headers.set("X-Content-Type-Options", "nosniff");
   resp.headers.set("X-Frame-Options", "DENY");
   resp.headers.set("Referrer-Policy", "no-referrer");
@@ -1013,7 +1037,9 @@ Bun.serve({
   // has its own connect/idle timeouts and starts sending bytes immediately).
   idleTimeout: 60,
   async fetch(req, server) {
-    return withSecurityHeaders(await handleRequest(req, server));
+    const resp = await handleRequest(req, server);
+    const isDocs = new URL(req.url).pathname === "/api/docs";
+    return withSecurityHeaders(resp, isDocs ? DOCS_CSP : APP_CSP);
   },
   error(err) {
     log("error", "Unhandled server error", { error: String(err) });
@@ -1127,6 +1153,17 @@ async function handleRequest(req: Request, server: Bun.Server<undefined>): Promi
 
   // Static files (public — frontend handles login UI)
   if (url.pathname === "/" || !url.pathname.startsWith("/api/")) {
+    // Serve real sub-resources (CSS/JS/images under public/) as-is; anything
+    // else falls through to the SPA shell below, same as today.
+    if (url.pathname !== "/") {
+      const filePath = path.join(PUBLIC_DIR, decodeURIComponent(url.pathname));
+      if (filePath.startsWith(`${PUBLIC_DIR}${path.sep}`)) {
+        const file = Bun.file(filePath);
+        if (await file.exists()) {
+          return new Response(file, { headers: { "Cache-Control": "no-store" } });
+        }
+      }
+    }
     return new Response(STATIC_HTML, {
       headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
     });

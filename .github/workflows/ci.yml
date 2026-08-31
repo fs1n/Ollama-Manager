@@ -22,8 +22,14 @@ jobs:
       - name: Lint
         run: bun run lint
 
-      - name: Type check
-        run: bunx tsc --noEmit
+      - name: Type check (server)
+        run: bunx tsc --noEmit -p tsconfig.json
+
+      - name: Type check (frontend)
+        run: bunx tsc --noEmit -p public/tsconfig.json
+
+      - name: Build frontend
+        run: bun run build:web
 
       - name: Test
         run: bun test

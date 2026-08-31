@@ -1,0 +1,43 @@
+#login-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: var(--bg);
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+#login-overlay.open {
+  display: flex;
+}
+.login-box {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  width: 340px;
+  max-width: 90vw;
+}
+.login-logo {
+  justify-content: center;
+  margin-bottom: 20px;
+}
+.login-subtitle {
+  text-align: center;
+  margin-bottom: 20px;
+  color: var(--text2);
+  font-size: 13px;
+}
+.login-input {
+  margin-bottom: 12px;
+}
+.login-btn {
+  width: 100%;
+}
+.login-error {
+  color: var(--danger);
+  font-size: 12px;
+  text-align: center;
+  margin-top: 12px;
+  display: none;
+}

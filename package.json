@@ -4,8 +4,12 @@
   "description": "Web UI for managing Ollama models, with automatic LiteLLM model sync",
   "type": "module",
   "scripts": {
+    "predev": "bun run build:web",
     "dev": "bun run --watch src/index.ts",
+    "prestart": "bun run build:web",
     "start": "bun run src/index.ts",
+    "build:web": "bun build public/index.html --outdir dist/public --sourcemap=linked",
+    "dev:web": "bun build public/index.html --outdir dist/public --sourcemap=linked --watch",
     "lint": "biome check .",
     "lint:fix": "biome check . --write",
     "format": "biome format . --write"

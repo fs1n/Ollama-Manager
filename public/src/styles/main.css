@@ -1,0 +1,16 @@
+/* Cascade layer order, declared up front so precedence between files is
+   explicit and independent of import order or selector specificity — a
+   later layer always wins over an earlier one, even a higher-specificity
+   rule in it. `responsive` is deliberately last: media-query overrides
+   must win regardless of what else targets the same selector. */
+@layer reset, tokens, layout, components, pages, responsive;
+
+@import "./reset.css" layer(reset);
+@import "./tokens.css" layer(tokens);
+@import "./layout.css" layer(layout);
+@import "./components.css" layer(components);
+@import "./pages/models.css" layer(pages);
+@import "./pages/chat.css" layer(pages);
+@import "./pages/catalog.css" layer(pages);
+@import "./pages/auth.css" layer(pages);
+@import "./responsive.css" layer(responsive);
