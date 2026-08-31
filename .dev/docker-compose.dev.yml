@@ -1,4 +1,36 @@
 services:
+  ollama-manager:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        BUILD_VERSION: dev
+    image: ollama-manager:dev
+    container_name: ollama-manager-dev
+    ports:
+      - "3000:3000"
+    environment:
+      OLLAMA_HOST: "http://host.docker.internal:11434"
+      MASTER_KEY: "${OLLAMA_MANAGER_MASTER_KEY:-ollama-manager-dev-key}"
+      PORT: "3000"
+      LITELLM_URL: "http://litellm:4000"
+      LITELLM_KEY: "${LITELLM_MASTER_KEY:-sk-litellm-dev}"
+      LITELLM_SYNC_INTERVAL: "30"
+    env_file:
+      - .env
+    depends_on:
+      litellm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bun -e \"process.exit((await fetch('http://localhost:3000/health')).ok ? 0 : 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
     container_name: litellm-dev

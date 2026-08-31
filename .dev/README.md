@@ -1,29 +1,51 @@
 # Dev Environment Setup
 
-This folder contains local development companions that are **not** part of the production build.
+This folder spins up the full local development stack:
 
-## LiteLLM Dev Proxy
+- **Ollama Manager** on http://localhost:3000
+- **LiteLLM Proxy** on http://localhost:4000/ui
+- **Postgres** for LiteLLM on port 5432
 
-Start a local LiteLLM proxy with Postgres for testing the Manager's LiteLLM sync integration:
+## Start
 
 ```bash
 cd .dev
-docker compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml up -d --build
 ```
 
-The UI is available at http://localhost:4000/ui.
+The first build of `ollama-manager` may take a moment.
 
-- Username: `admin`
-- Password: the value of `LITELLM_MASTER_KEY` in `.env` (default: `sk-litellm-dev`)
+## Environment
 
-Make sure your `.env` exists; copy from the project root if needed:
+Create a `.env` (or let the compose use the defaults):
 
 ```bash
-cp ../.env .env 2>/dev/null || echo "LITELLM_MASTER_KEY=sk-litellm-dev" > .env
+cat > .env <<EOF
+LITELLM_MASTER_KEY=sk-litellm-dev
+OLLAMA_MANAGER_MASTER_KEY=ollama-manager-dev-key
+EOF
 ```
 
-To stop:
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `LITELLM_MASTER_KEY` | `sk-litellm-dev` | LiteLLM admin UI + API key. Also used by Ollama Manager to sync. |
+| `OLLAMA_MANAGER_MASTER_KEY` | `ollama-manager-dev-key` | Master key for the Ollama Manager login. |
+
+Ollama itself is expected to run on the host at `http://localhost:11434` (or wherever `host.docker.internal` resolves to).
+
+## Access
+
+- Ollama Manager: http://localhost:3000 — login with the `OLLAMA_MANAGER_MASTER_KEY`
+- LiteLLM UI: http://localhost:4000/ui — username `admin`, password = `LITELLM_MASTER_KEY`
+
+## Stop
 
 ```bash
 docker compose -f docker-compose.dev.yml down
+```
+
+To also remove the Postgres volume:
+
+```bash
+docker compose -f docker-compose.dev.yml down -v
 ```
