@@ -136,4 +136,10 @@ dist
 .pnp.*
 
 .claude/
-.dev/
+
+# Dev environment local state
+.dev/.env
+.dev/*.log
+.dev/postgres_data/
+.dev/prometheus_data/
+.dev/litellm.db

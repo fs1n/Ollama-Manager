@@ -1,0 +1,11 @@
+model_list: []
+
+litellm_settings:
+  telemetry: False
+  drop_params: True
+
+router_settings:
+  timeout: 30
+
+server:
+  port: 4000
