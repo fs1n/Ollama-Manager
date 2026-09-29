@@ -117,10 +117,12 @@ bun test
 
 ## Docker & CI
 
-- **Dockerfile**: uses `oven/bun:1-alpine`. Copies `package.json` + `bun.lock`, installs dependencies, copies `src/` and `public/`, runs `bun run build:web`, then starts `bun run src/index.ts`. `BUILD_VERSION` build-arg sets `OLLAMA_MANAGER_VERSION`.
+- **Dockerfile**: uses `oven/bun:1.3.11-alpine` (pinned, same Bun as CI). Copies `package.json` + `bun.lock`, installs dependencies, copies `src/` and `public/`, runs `bun run build:web`, then starts `bun run src/index.ts`. `BUILD_VERSION` build-arg sets `OLLAMA_MANAGER_VERSION`.
 - **CI** (`.github/workflows/ci.yml`): lint, typecheck, frontend build, tests with per-file coverage thresholds, a jscpd duplicate ratchet (2 %), a non-blocking `bun audit`, and a Docker build + `/health` smoke test. Actions are pinned to commit SHAs (Dependabot keeps them current); Bun is pinned to the version in `package.json` `packageManager` and the Dockerfile.
 - **Release** (`.github/workflows/docker-image.yml`): on `v*` tags, runs the full CI via `workflow_call` first and refuses tags that don't match `package.json` `version`.
-- **Docker compose** (`docker-compose.yml`): present for local builds; points `OLLAMA_HOST` to `host.docker.internal:11434`.
+- **Docker compose** (`docker-compose.yml`): present for local builds; points `OLLAMA_HOST` to `host.docker.internal:11434`. An `ollaya` service sits behind the `ollaya` profile (`docker compose --profile ollaya up`); variables used in it must have defaults, because Compose interpolates the whole file even for inactive profiles.
+- **Dev stack** (`.dev/docker-compose.dev.yml`): manager + LiteLLM + Postgres + Ollaya, with LiteLLM's `TYPESAFE_API_BASE` pointing at the manager's gateway.
+- **Ollaya smoke test** (`.github/workflows/ollaya-smoke.yml`, weekly + manual): starts Ollaya's CPU image and the manager, then runs `scripts/ollaya-smoke.ts` (pull, decide, 422, create + built-in questions, gateway incl. its allowlist, delete). Model blobs are cached between runs.
 
 ## Key Patterns to Preserve
 
@@ -153,6 +155,8 @@ src/
   http.ts           # Logging, errors, idle timeout, security headers
   library.ts        # ollama.com library/search/detail + ollaya.dev parsers
   *.test.ts         # Unit and in-process tests; server.test.ts runs the real process
+scripts/
+  ollaya-smoke.ts   # End-to-end checks against a running manager + real Ollaya
 public/
   index.html        # SPA shell (imports bundled TS/CSS sources)
   src/              # Frontend source modules

@@ -49,6 +49,43 @@ services:
 
 Then open [http://localhost:3000](http://localhost:3000).
 
+### With Ollaya (decision models)
+
+Add an [Ollaya](https://github.com/ollaya-dev/ollaya) service and point the manager at it. Models
+are pulled from the manager's *Pull model* page (backend *Ollaya*) and tried out on the *Decide*
+page.
+
+```yaml
+services:
+  ollama-manager:
+    image: ghcr.io/fs1n/ollama-manager:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      - MASTER_KEY=your-secret-key-here
+      - OLLAYA_HOST=http://ollaya:11435
+      - OLLAYA_API_KEY=your-ollaya-key
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  ollaya:
+    image: ghcr.io/ollaya-dev/ollaya   # :cuda (or :cuda12) with `gpus: all` on NVIDIA hosts
+    environment:
+      - OLLAYA_HOST=0.0.0.0
+      - OLLAYA_API_KEY=your-ollaya-key
+    volumes:
+      - ollaya-models:/home/ollaya/.ollaya/models
+
+volumes:
+  ollaya-models:
+```
+
+The repository's `docker-compose.yml` contains the same service behind a profile:
+`docker compose --profile ollaya up`. An Ollaya installed on the host binds `127.0.0.1` by
+default; start it with `OLLAYA_HOST=0.0.0.0` and an `OLLAYA_API_KEY` and use
+`OLLAYA_HOST=http://host.docker.internal:11435` for the manager.
+
 ## Development
 
 ### Install Bun:
@@ -87,6 +124,15 @@ bun test --coverage     # per-file thresholds in bunfig.toml (75 % lines, 60 % f
 ```
 
 Release tags (`vX.Y.Z`) must match the `version` in `package.json`.
+
+Against a real Ollaya (pull, decide, create/delete, the TypeSafe gateway), with the manager running:
+
+```bash
+MANAGER_URL=http://localhost:3000 MASTER_KEY=… OLLAYA_TYPESAFE_KEY=… bun run scripts/ollaya-smoke.ts
+```
+
+CI runs this weekly and on demand (`.github/workflows/ollaya-smoke.yml`) with Ollaya's CPU image.
+The full local stack with Ollama Manager, LiteLLM and Ollaya is in [`.dev/`](.dev/README.md).
 
 ### Backends API
 
