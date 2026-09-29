@@ -3,6 +3,18 @@
 Stand: 2026-09-29, basierend auf `ollaya-dev/ollaya@b88bf19` und dessen normativem API-Vertrag
 (`docs/api.md`).
 
+## Umsetzungsstand
+
+| Phase | Inhalt | PR | Stand |
+|---|---|---|---|
+| 1 | Backend-Registry, `/api/backends/{id}/…`, Health, Katalog | #8 | umgesetzt |
+| 2 | Parallele Verwaltung in der UI | #9 | umgesetzt |
+| 3 | Decide-Playground, dazu die Befunde aus `docs/code-quality-review.md` | #10 | umgesetzt |
+| 4 | LiteLLM ↔ Ollaya, **geändert** gegenüber der ersten Fassung (siehe §4) | #11 | umgesetzt |
+| 5 | Doku, Betrieb, CI | – | in Arbeit |
+
+Die PRs bauen aufeinander auf (#9 auf #8, #10 auf #9, #11 auf #10).
+
 ## 1. Was ist Ollaya, und was bedeutet das für uns?
 
 [Ollaya](https://github.com/ollaya-dev/ollaya) ist "Ollama für Decision Models": ein lokaler
@@ -103,7 +115,8 @@ Beispiele:
   nutzt nur noch das neue Schema.
 - **Reihenfolge in `handleRequest()`**: öffentliche Routen → statische Dateien →
   `MASTER_KEY`-Auth-Gate → `/api/backends` und `/api/backends/{id}/…` → Manager-eigene Routen
-  (`/api/catalog/*`, `/api/litellm/*`) → Legacy-Alias zu Ollama.
+  (`/api/catalog/*`, `/api/litellm/*`) → Legacy-Alias zu Ollama. *(Umgesetzt als Routentabelle
+  mit `access: "public" | "session"` pro Route, siehe #10.)*
 
 ### 2.3 Fähigkeiten
 
@@ -132,12 +145,12 @@ Beispiele:
 | **Dashboard** | Eine Karte pro Backend (Status, Version, Anzahl Modelle, laufende Modelle, belegter RAM/VRAM) plus eine Summenzeile. Polling beider Backends unabhängig. |
 | **Models** | Eine gemeinsame Tabelle mit Spalte/Badge **Backend** und Filter-Chips *Alle / Ollama / Ollaya* (Auswahl in `localStorage`). Zusatzspalten `format` (gguf/onnx/router) und Quantisierung. Show/Delete/Copy gehen an das Backend des Modells. |
 | **Running** | Gemeinsame Liste mit Backend-Badge; `device` (cpu/cuda:0/metal) und `expires_at: null` → "forever". *Unload*: Ollama wie bisher, Ollaya über `POST /api/backends/ollaya/decide {model, keep_alive: 0}`. |
-| **Pull** | Eingabefeld + **Ziel-Backend-Auswahl** (Default: Ollama; Vorschlag anhand bekannter Namen aus dem Ollaya-Katalog). Mehrere Pulls können gleichzeitig laufen, jeder mit Backend-Badge im Fortschritt. |
+| **Pull** | Eingabefeld + **Ziel-Backend-Auswahl** (Default: Ollama; Vorschlag anhand bekannter Namen aus dem Ollaya-Katalog). *(Umgesetzt mit einem Pull zur Zeit, nicht parallel.)* |
 | **Copy** | Nur innerhalb desselben Backends (Quell-Modell bestimmt das Backend). |
 | **Catalog** | Zwei Quellen nebeneinander: *ollama.com* und *ollaya.dev*, als Tabs oder Quellen-Filter. Ein Klick auf "Pull" geht automatisch an das passende Backend; "installiert" wird pro Backend geprüft. |
 | **Chat / Generate / Embeddings** | Modell-Dropdown zeigt nur Modelle von Backends mit Fähigkeit `chat`/`generate`/`embed` (also Ollama). |
 | **Decide** (neu) | Modell-Dropdown nur mit Modellen von Backends mit Fähigkeit `decide` (Ollaya). |
-| **LiteLLM** | Zwei Abschnitte: Ollama-Sync (wie bisher) und Ollaya-über-TypeSafe-Pass-through (siehe §4). |
+| **LiteLLM** | Zwei Abschnitte: Ollama-Sync (wie bisher) und Ollaya über den TypeSafe-Pass-through (siehe §4). |
 
 Nav-Einträge erscheinen, sobald **mindestens ein** Backend die Fähigkeit hat; ist Ollaya nicht
 konfiguriert, sieht die UI exakt aus wie heute.
@@ -172,6 +185,7 @@ konfiguriert, sieht die UI exakt aus wie heute.
 4. **`GET /api/backends`** wie in §2.3 (Status-Probe mit 2s-Timeout, parallel).
 5. **`/health`**: zusätzlich `backends: [{id, status, version}]`; die bisherigen Felder `ollama`
    und `ollamaVersion` bleiben für Kompatibilität (Docker-Healthcheck). HTTP-Status bleibt 200.
+   *(Seit #10 zeigt `/health` Versionen und Backend-Liste nur mit Session.)*
 6. **Katalog**: `/api/catalog/ollaya` holt `https://ollaya.dev/search.json`, normalisiert es
    (neu in `src/library.ts`: `parseOllayaSearchIndex()`), In-Memory-Cache 1 h wie beim
    Ollama-Katalog.
@@ -210,65 +224,93 @@ konfiguriert, sieht die UI exakt aus wie heute.
 
 ### Phase 4 – LiteLLM (siehe §4)
 
-1. LiteLLM-Seite in zwei Abschnitte teilen: *Ollama → Model-Sync* (unverändert) und
-   *Ollaya → TypeSafe-Pass-through*.
-2. Ollaya-Abschnitt: **Prüfung statt Sync**. Der Server ruft `GET ${LITELLM_URL}/typesafe/v1/models`
-   mit `LITELLM_KEY` auf und vergleicht mit `GET ${OLLAYA_HOST}/v1/models`:
-   - gleiche Modelle → "Ollaya ist über LiteLLM erreichbar" (grün);
-   - andere Modelle (z.B. `jev-latest`) → "LiteLLM zeigt auf TypeSafe-Cloud, nicht auf Ollaya";
-   - 404 → "LiteLLM-Version ohne TypeSafe-Pass-through (ab v1.103.0-rc)".
-3. Setup-Anleitung in der UI mit den nötigen LiteLLM-Env-Variablen (vorbefüllt mit
-   `OLLAYA_HOST`).
-4. Neue Route `GET /api/litellm/ollaya-status`; Tests mit gemockten Upstreams.
+*Gegenüber der ersten Fassung geändert: Der Manager bekommt einen eingeschränkten
+TypeSafe-Gateway, weil LiteLLM direkt auf Ollaya dessen Management-API offenlegt.*
+
+1. **TypeSafe-Gateway** `/api/typesafe/v1/{systemone,decisions,models}` im Manager: leitet nur
+   diese drei Pfade an Ollayas `/v1/*` weiter (mit `OLLAYA_API_KEY`), alles andere unter
+   `/api/typesafe/` ist 404. Eingeschaltet und authentifiziert über `OLLAYA_TYPESAFE_KEY`
+   (Bearer, keine Manager-Session, da LiteLLM der Aufrufer ist); falsche Keys werden wie
+   Login-Versuche rate-limitiert; Idle-Timeout für Kaltstarts aufgehoben.
+2. LiteLLM-Seite in zwei Abschnitte teilen: *Ollama → Model-Sync* (unverändert) und
+   *Ollaya through LiteLLM*.
+3. Ollaya-Abschnitt: **Prüfung statt Sync**, Route `GET /api/litellm/ollaya-status`. Der Server
+   ruft `GET ${LITELLM_URL}/typesafe/v1/models` mit `LITELLM_KEY` auf und vergleicht mit Ollayas
+   `/v1/models`:
+   - gleiche Modelle → verbunden;
+   - andere Modelle (z.B. `jev-latest`) → LiteLLM zeigt auf einen anderen TypeSafe-Dienst;
+   - 404 → LiteLLM ohne TypeSafe-Pass-through (vor 1.103);
+   - 401/403 → `LITELLM_KEY` abgelehnt; 5xx → Ziel oder Key auf der LiteLLM-Seite falsch.
+   Zusätzlich prüft er `GET ${LITELLM_URL}/typesafe/api/tags`: antwortet das mit einer
+   Modellliste, erreicht LiteLLM Ollayas Management-API → **rote Warnung**.
+4. Setup-Anleitung in der UI mit den LiteLLM-Env-Variablen für den Gateway und einem
+   `curl`-Beispiel.
+5. Tests mit gemockten Upstreams; manueller Integrationstest mit echtem LiteLLM.
 
 ### Phase 5 – Doku, Betrieb, CI
 
 1. **README** + **CLAUDE.md**: neue Env-Variablen, Backend-Registry, URL-Schema
-   `/api/backends/{id}/…`, Legacy-Alias, LiteLLM-Hinweise.
+   `/api/backends/{id}/…`, Legacy-Alias, LiteLLM-Hinweise. *(Laufend mit den PRs gepflegt.)*
 2. **docker-compose.yml**: optionaler `ollaya`-Service (`ghcr.io/ollaya-dev/ollaya`, bzw. `:cuda`)
    oder `OLLAYA_HOST=http://host.docker.internal:11435`. Ollaya auf dem Host bindet standardmässig
    nur `127.0.0.1` → für Docker `OLLAYA_HOST=0.0.0.0` + `OLLAYA_API_KEY` setzen.
-3. **CI**: bestehende Pipeline deckt alles ab; optional ein manueller/nächtlicher Smoke-Test mit
-   dem CPU-Image von Ollaya (Pull → Tags → Decide), da Modelle hunderte MB gross sind.
+3. **CI**: *(Grundlage in #10: Release-Gate, SHA-Pinning, Coverage, Docker-Smoke.)* Optional ein
+   manueller/nächtlicher Smoke-Test mit dem CPU-Image von Ollaya (Pull → Tags → Decide), da
+   Modelle hunderte MB gross sind.
 
 ## 4. LiteLLM und Decision Models
 
 **Kurz: LiteLLM unterstützt Decision Models, aber nicht als registrierte Modelle – ein "Sync" wie
-bei Ollama ist deshalb weder möglich noch nötig.**
+bei Ollama ist weder möglich noch nötig. LiteLLM darf aber nicht direkt auf Ollaya zeigen, sondern
+auf den TypeSafe-Gateway des Managers.**
 
-- LiteLLM hat seit **v1.103.0-rc** eine TypeSafe-Integration (für Jev, das Cloud-Decision-Model,
-  dessen API Ollaya nachbildet). Das ist ein reiner **Pass-through**: Alles unter
-  `/typesafe/*` wird an `TYPESAFE_API_BASE` (Default `https://api.typesafe.ai`) weitergeleitet,
-  z.B. `POST /typesafe/v1/systemone`, `GET /typesafe/v1/models`. LiteLLM setzt dabei
-  `TYPESAFE_API_KEY` ein; Clients brauchen nur einen LiteLLM-Virtual-Key. Logging und
-  Kostenerfassung laufen über `usage.input_tokens` aus der Antwort.
-- Es gibt **keine** `model_list`-Einträge und kein `/model/new` dafür – LiteLLM leitet einfach
-  jede Modellbezeichnung durch.
-- Ollayas `/v1/systemone`, `/v1/decisions` und `/v1/models` sind laut Ollaya-Doku
-  **wire-identisch** mit TypeSafe. Damit genügt auf der LiteLLM-Seite:
+### Was LiteLLM tut (verifiziert mit LiteLLM 1.103.0 und Ollaya 0.7.5)
 
-  ```sh
-  TYPESAFE_API_BASE=http://<ollaya-host>:11435
-  TYPESAFE_API_KEY=<OLLAYA_API_KEY>   # beliebiger Wert, falls Ollaya ohne Key läuft
-  ```
+- LiteLLM hat seit **1.103** eine TypeSafe-Integration (für Jev, das Cloud-Decision-Model, dessen
+  API Ollaya nachbildet). Die Route `/typesafe/{endpoint:path}` ist ein reiner **Pass-through**:
+  Sie hängt den Pfad an `TYPESAFE_API_BASE` (Default `https://api.typesafe.ai`) und setzt
+  `TYPESAFE_API_KEY` als Bearer ein. Clients brauchen nur einen LiteLLM-Key.
+- Es gibt **keine** `model_list`-Einträge und kein `/model/new` dafür.
+- Ollayas `/v1/systemone`, `/v1/decisions` und `/v1/models` sind wire-identisch mit TypeSafe;
+  Aufrufe über LiteLLM funktionieren (getestet: 200 mit echten Antworten).
 
-  Danach sind alle lokal installierten Ollaya-Modelle automatisch über
-  `LITELLM/typesafe/v1/systemone` nutzbar, ohne dass der Manager etwas registrieren muss. Neu
-  gepullte Modelle sind sofort verfügbar.
+### Warum nicht direkt auf Ollaya
 
-Einschränkungen, die wir in der UI erklären sollten:
+Der Pass-through leitet **jeden** Pfad unter `/typesafe/` weiter, nicht nur die drei
+Decision-Endpunkte. Mit `TYPESAFE_API_BASE=http://<ollaya>:11435` erreicht jeder mit einem
+LiteLLM-Key auch Ollayas native API. Im Test hat ein `POST /typesafe/api/copy` mit nur dem
+LiteLLM-Key ein Modell in Ollaya angelegt; ebenso möglich wären `pull` (Disk und Bandbreite),
+`create` und `delete`. Die Empfehlung der ersten Fassung (`TYPESAFE_API_BASE=http://<ollaya>:11435`)
+ist deshalb **zurückgezogen**.
+
+### Empfohlene Konfiguration
+
+```sh
+# Manager
+OLLAYA_HOST=http://ollaya:11435
+OLLAYA_TYPESAFE_KEY=<langer Zufallswert>
+
+# LiteLLM
+TYPESAFE_API_BASE=http://ollama-manager:3000/api/typesafe
+TYPESAFE_API_KEY=<derselbe Wert wie OLLAYA_TYPESAFE_KEY>
+```
+
+Der Manager lässt dort nur `systemone`, `decisions` und `models` durch; `/typesafe/api/copy` und
+`/typesafe/api/tags` über LiteLLM enden im Test mit 401. Alle installierten Ollaya-Modelle sind
+über `<litellm>/typesafe/v1/systemone` nutzbar, neu gepullte sofort.
+
+### Einschränkungen
 
 - **Nur ein Ziel**: `TYPESAFE_API_BASE` ist eine einzige Env-Variable – LiteLLM zeigt entweder
-  auf die TypeSafe-Cloud oder auf Ollaya, nicht auf beide.
-- **Nicht per API konfigurierbar**: Der Manager kann die Env-Variable von LiteLLM nicht setzen,
+  auf die TypeSafe-Cloud oder auf Ollaya (über den Manager), nicht auf beide.
+- **Nicht per API konfigurierbar**: Der Manager kann die Env-Variablen von LiteLLM nicht setzen,
   nur prüfen und anleiten.
-- **Kosten**: LiteLLMs Preistabelle kennt nur `typesafe/jev-*`; lokale Ollaya-Modelle werden
-  vermutlich mit 0 $ oder ohne Preis geloggt. Das ist für lokale Modelle korrekt, sollte aber
-  getestet werden.
+- **Kosten**: LiteLLM loggt Aufrufe als `typesafe/<model>`; seine Preistabelle kennt nur
+  `typesafe/jev-*`. Wie lokale Ollaya-Modelle abgerechnet werden, ist **nicht getestet** (der
+  Test-Proxy lief ohne Datenbank).
 - **Kein OpenAI-Format**: Decision Models sind über `/chat/completions` nicht erreichbar – Clients
-  müssen den TypeSafe-SDK oder `/typesafe/v1/systemone` direkt nutzen.
-- **Nicht verifiziert**: Das Zusammenspiel LiteLLM ↔ Ollaya ist aus beiden Dokus abgeleitet, aber
-  noch nicht praktisch getestet. Erster Schritt von Phase 4 ist ein manueller Test.
+  nutzen den TypeSafe-SDK (`TYPESAFE_BASE_URL=<litellm>/typesafe`) oder rufen
+  `/typesafe/v1/systemone` direkt auf.
 
 ## 5. Risiken und offene Fragen
 
@@ -277,7 +319,9 @@ Einschränkungen, die wir in der UI erklären sollten:
 - **`search.json`** ist als Typeahead der Website gedacht, nicht als offizielle API. Parser
   tolerant bauen, bei Fehler leere Liste + Hinweis statt Absturz.
 - **Sicherheit**: `/api/backends/*` erlaubt Pull/Delete/Create – gleiche Risiken wie der
-  Ollama-Proxy, gleicher Schutz durch `MASTER_KEY`.
+  Ollama-Proxy, gleicher Schutz durch `MASTER_KEY`. Der TypeSafe-Gateway ist die einzige Route,
+  die ohne Manager-Session in Ollaya führt; seine Allowlist darf nie über die drei
+  Decision-Endpunkte hinaus wachsen.
 - **Last durch Parallel-Polling**: Das Dashboard fragt jetzt zwei Backends ab. Unkritisch
   (`/api/tags`/`/api/ps` sind billig), aber Polling-Intervall pro Backend beibehalten und bei
   unerreichbarem Backend mit Backoff abfragen.
@@ -294,7 +338,7 @@ Einschränkungen, die wir in der UI erklären sollten:
 | 1 Backend | Registry, Proxy-Refactor, Routing, `/api/backends`, Health, Katalog, Tests | 1,5 Tage |
 | 2 Parallele Verwaltung | aggregierter State, Badges/Filter, alle Verwaltungsseiten | 2–2,5 Tage |
 | 3 Decide-Playground | Frage-Editor, Ergebnis-Ansicht (+ Create optional) | 2 Tage |
-| 4 LiteLLM | Status-Prüfung + Anleitung, manueller Integrationstest | 0,5–1 Tag |
+| 4 LiteLLM | Gateway, Status-Prüfung + Anleitung, Integrationstest | 1 Tag |
 | 5 Doku/Betrieb | README, CLAUDE.md, Compose | 0,5 Tage |
 
 Phase 1 + 2 liefern bereits vollwertiges paralleles Modell-Management; Phase 3 und 4 können
