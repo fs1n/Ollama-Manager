@@ -2,7 +2,23 @@ import { apiOk, readNdjsonLines } from "../api";
 import { renderMarkdown } from "../render/markdown";
 import { ensureModels, populateModelSelects } from "../state/models";
 import { toast } from "../ui/toast";
-import { escHtml } from "../utils/format";
+import { backendPath, parseModelKey } from "../utils/backends";
+import { errorMessage, escHtml, isAbortError } from "../utils/format";
+
+interface ChatLine {
+  message?: { content?: string; thinking?: string };
+}
+interface GenerateLine {
+  response?: string;
+}
+
+// The model <select>s hold model keys ("backend/name"); resolve one to the
+// backend endpoint and the plain model name the backend expects.
+function resolveModel(selectId: string, path: string): { url: string; model: string } | null {
+  const parsed = parseModelKey((document.getElementById(selectId) as HTMLSelectElement).value);
+  if (!parsed) return null;
+  return { url: backendPath(parsed.backend, path), model: parsed.name };
+}
 
 const TYPING_INDICATOR_HTML =
   '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
@@ -35,8 +51,8 @@ async function sendChat(): Promise<void> {
   const input = document.getElementById("chat-input") as HTMLTextAreaElement;
   const text = input.value.trim();
   if (!text) return;
-  const model = (document.getElementById("chat-model") as HTMLSelectElement).value;
-  if (!model) {
+  const target = resolveModel("chat-model", "/chat");
+  if (!target) {
     toast("Select a model first", "error");
     return;
   }
@@ -76,15 +92,15 @@ async function sendChat(): Promise<void> {
   let full = "";
 
   try {
-    const r = await apiOk("/api/chat", {
+    const r = await apiOk(target.url, {
       method: "POST",
-      body: JSON.stringify({ model, messages: chatHistory, stream: true }),
+      body: JSON.stringify({ model: target.model, messages: chatHistory, stream: true }),
       signal: chatAbort.signal,
     });
 
     let firstChunk = true;
 
-    for await (const ev of readNdjsonLines(r)) {
+    for await (const ev of readNdjsonLines<ChatLine>(r)) {
       if (ev.message?.content) {
         if (firstChunk) {
           contentEl.textContent = "";
@@ -108,9 +124,9 @@ async function sendChat(): Promise<void> {
 
     chatHistory.push({ role: "assistant", content: full });
     contentEl.innerHTML = renderMarkdown(contentEl.textContent || "");
-  } catch (e: any) {
+  } catch (e) {
     // Roll back user message on failure (except for partial-success aborts)
-    if (e.name === "AbortError") {
+    if (isAbortError(e)) {
       if (full) {
         contentEl.appendChild(document.createTextNode("\n\n[stopped]"));
         chatHistory.push({ role: "assistant", content: full });
@@ -119,7 +135,7 @@ async function sendChat(): Promise<void> {
         chatHistory.pop();
       }
     } else {
-      contentEl.textContent = `Error: ${e.message}`;
+      contentEl.textContent = `Error: ${errorMessage(e)}`;
       toast("Chat request failed", "error");
       chatHistory.pop(); // remove the user msg that never got answered
     }
@@ -141,9 +157,9 @@ async function doGenerate(): Promise<void> {
     return;
   }
 
-  const model = (document.getElementById("gen-model") as HTMLSelectElement).value;
+  const target = resolveModel("gen-model", "/generate");
   const prompt = (document.getElementById("gen-prompt") as HTMLTextAreaElement).value.trim();
-  if (!model || !prompt) {
+  if (!target || !prompt) {
     toast("Select a model and enter a prompt", "error");
     return;
   }
@@ -158,19 +174,19 @@ async function doGenerate(): Promise<void> {
   genBtn.classList.remove("btn-primary");
 
   try {
-    const body: Record<string, unknown> = { model, prompt, stream: true };
+    const body: Record<string, unknown> = { model: target.model, prompt, stream: true };
     if (system) body.system = system;
     if (format) body.format = format;
-    const r = await apiOk("/api/generate", {
+    const r = await apiOk(target.url, {
       method: "POST",
       body: JSON.stringify(body),
       signal: genAbort.signal,
     });
-    for await (const ev of readNdjsonLines(r)) {
+    for await (const ev of readNdjsonLines<GenerateLine>(r)) {
       if (ev.response) out.appendChild(document.createTextNode(ev.response));
     }
-  } catch (e: any) {
-    if (e.name !== "AbortError") toast(`Generate failed: ${e.message}`, "error");
+  } catch (e) {
+    if (!isAbortError(e)) toast(`Generate failed: ${errorMessage(e)}`, "error");
   } finally {
     genAbort = null;
     genBtn.innerHTML = '<i class="ti ti-wand" aria-hidden="true"></i> Generate';
@@ -180,9 +196,9 @@ async function doGenerate(): Promise<void> {
 }
 
 async function doEmbed(): Promise<void> {
-  const model = (document.getElementById("embed-model") as HTMLSelectElement).value;
+  const target = resolveModel("embed-model", "/embed");
   const raw = (document.getElementById("embed-input") as HTMLTextAreaElement).value.trim();
-  if (!model || !raw) {
+  if (!target || !raw) {
     toast("Select a model and enter text", "error");
     return;
   }
@@ -193,9 +209,9 @@ async function doEmbed(): Promise<void> {
   const truncate =
     (document.getElementById("embed-truncate") as HTMLSelectElement).value === "true";
   try {
-    const r = await apiOk("/api/embed", {
+    const r = await apiOk(target.url, {
       method: "POST",
-      body: JSON.stringify({ model, input, truncate }),
+      body: JSON.stringify({ model: target.model, input, truncate }),
     });
     const d = await r.json();
     const vecs: number[][] = d.embeddings || [];
@@ -219,8 +235,8 @@ async function doEmbed(): Promise<void> {
       .join("\n");
     (document.getElementById("embed-result") as HTMLElement).textContent = preview;
     toast(`Generated ${vecs.length} embedding(s) — ${vecs[0]?.length} dims`, "success");
-  } catch (e: any) {
-    toast(`Embed failed: ${e.message}`, "error");
+  } catch (e) {
+    toast(`Embed failed: ${errorMessage(e)}`, "error");
   }
 }
 

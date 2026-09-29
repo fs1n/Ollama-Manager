@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { scrapeLibraryWithFallback } from "./index";
+import { createCatalogs, scrapeLibraryWithFallback } from "./catalogs";
 
 const fixture = (name: string) =>
   readFileSync(path.join(import.meta.dir, "..", "test", "fixtures", name), "utf-8");
@@ -12,7 +12,7 @@ const htmlResponse = (body: string) =>
 // Several tests below deliberately make /library parse to 0 models to
 // exercise the /search fallback path — that's expected to log a "/library
 // parsed 0 models, falling back to /search pagination" warning each time
-// (see scrapeLibraryWithFallback in ./index.ts), not a sign anything failed.
+// (see scrapeLibraryWithFallback in ./catalogs.ts), not a sign anything failed.
 describe("scrapeLibraryWithFallback", () => {
   test("returns /library models without touching /search", async () => {
     const fetchFn = mock((url: string) => {
@@ -65,5 +65,57 @@ describe("scrapeLibraryWithFallback", () => {
   test("throws when both sources parse to zero models", async () => {
     const fetchFn = mock(() => Promise.resolve(htmlResponse("<html><body>x</body></html>")));
     await expect(scrapeLibraryWithFallback(fetchFn)).rejects.toThrow(/0 models/);
+  });
+});
+
+describe("catalog routes (M4: bounded detail cache)", () => {
+  const detailHtml = fixture("library-llama3.1-detail.html");
+
+  test("invalid or overlong names are refused before anything is fetched", async () => {
+    let calls = 0;
+    const catalogs = createCatalogs({
+      fetchFn: async () => {
+        calls++;
+        return htmlResponse(detailHtml);
+      },
+    });
+    for (const name of ["a".repeat(101), "UPPER", "-dash", "a/b"]) {
+      expect((await catalogs.serveLibraryDetail(name)).status).toBe(400);
+    }
+    expect(calls).toBe(0);
+  });
+
+  test("the detail cache keeps at most 500 names", async () => {
+    const catalogs = createCatalogs({ fetchFn: async () => htmlResponse(detailHtml) });
+    for (let i = 0; i < 520; i++) await catalogs.serveLibraryDetail(`m${i}`);
+    expect(catalogs.detailCacheSize()).toBe(500);
+  });
+
+  test("a registry 404 stays a 404, other failures a 502", async () => {
+    const notFound = createCatalogs({ fetchFn: async () => new Response("", { status: 404 }) });
+    expect((await notFound.serveLibraryDetail("nope")).status).toBe(404);
+    const broken = createCatalogs({ fetchFn: async () => new Response("", { status: 500 }) });
+    expect((await broken.serveLibraryDetail("nope")).status).toBe(502);
+  });
+
+  test("the library index is served with cache flags and retried on failure", async () => {
+    let calls = 0;
+    const catalogs = createCatalogs({
+      retryDelayMs: 1,
+      fetchFn: async () => {
+        calls++;
+        return calls === 1
+          ? new Response("", { status: 503 })
+          : htmlResponse(fixture("library-llama3.1.html"));
+      },
+    });
+    const body = (await (await catalogs.serveLibrary()).json()) as {
+      models: unknown[];
+      cached: boolean;
+      stale: boolean;
+    };
+    expect(body.models.length).toBe(1);
+    expect(body).toMatchObject({ cached: true, stale: false });
+    expect(calls).toBe(2);
   });
 });

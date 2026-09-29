@@ -35,7 +35,7 @@ export function createSessionToken(
 export function verifySessionToken(secret: string, token: string, now = Date.now()): boolean {
   const parts = token.split(".");
   if (parts.length !== 3) return false;
-  const [expiresStr, nonce, sig] = parts;
+  const [expiresStr = "", nonce = "", sig = ""] = parts;
   const expires = Number(expiresStr);
   if (!Number.isFinite(expires) || now > expires) return false;
   const expected = sign(secret, `${expiresStr}.${nonce}`);

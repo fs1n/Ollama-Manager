@@ -13,4 +13,5 @@
 @import "./pages/chat.css" layer(pages);
 @import "./pages/catalog.css" layer(pages);
 @import "./pages/auth.css" layer(pages);
+@import "./pages/decide.css" layer(pages);
 @import "./responsive.css" layer(responsive);

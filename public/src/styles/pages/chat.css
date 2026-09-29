@@ -66,16 +66,3 @@
 }
 
 /* Embed result */
-.embed-result {
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text2);
-  max-height: 200px;
-  overflow-y: auto;
-  word-break: break-all;
-  line-height: 1.7;
-}

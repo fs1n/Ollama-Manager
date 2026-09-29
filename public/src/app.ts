@@ -3,18 +3,25 @@ import { checkSession, initAuth } from "./pages/auth";
 import { initCatalog, loadCatalogTab } from "./pages/catalog";
 import { initChat, loadChat, loadEmbeddings, loadGenerate } from "./pages/chat";
 import { connect, initDashboard, loadAppVersion, loadDashboard } from "./pages/dashboard";
-import { initLiteLLM, loadLiteLLMStatus } from "./pages/litellm";
-import { initModels, loadModels, loadRunning } from "./pages/models";
+import { initDecide, loadDecide } from "./pages/decide";
+import { initLiteLLM, loadLiteLLMStatus, loadOllayaThroughLiteLLM } from "./pages/litellm";
+import { initModels, loadCopy, loadModels, loadPull, loadRunning } from "./pages/models";
 import { initModal } from "./ui/modal";
 
 registerPageLoader("dashboard", loadDashboard);
 registerPageLoader("models", loadModels);
 registerPageLoader("running", loadRunning);
+registerPageLoader("pull", loadPull);
+registerPageLoader("copy", loadCopy);
 registerPageLoader("chat", loadChat);
 registerPageLoader("generate", loadGenerate);
 registerPageLoader("embeddings", loadEmbeddings);
+registerPageLoader("decide", loadDecide);
 registerPageLoader("catalog", loadCatalogTab);
-registerPageLoader("litellm", loadLiteLLMStatus);
+registerPageLoader("litellm", async () => {
+  await loadLiteLLMStatus();
+  await loadOllayaThroughLiteLLM();
+});
 
 initNav();
 initModal();
@@ -22,6 +29,7 @@ initAuth();
 initDashboard();
 initModels();
 initChat();
+initDecide();
 initCatalog();
 initLiteLLM();
 

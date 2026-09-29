@@ -1,15 +1,26 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.4.15/schema.json",
-  "vcs": { "enabled": false, "clientKind": "git", "useIgnoreFile": true },
+  "vcs": {
+    "enabled": false,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
   "files": {
-    "includes": ["src/**/*.ts", "public/src/**/*.ts", "public/src/**/*.css", "package.json"]
+    "includes": [
+      "src/**/*.ts",
+      "scripts/**/*.ts",
+      "public/src/**/*.ts",
+      "public/src/**/*.css",
+      "package.json",
+      "public/index.html"
+    ]
   },
   "linter": {
     "enabled": true,
     "rules": {
       "recommended": true,
       "suspicious": {
-        "noExplicitAny": "warn"
+        "noExplicitAny": "error"
       }
     }
   },
@@ -18,8 +29,12 @@
       "includes": ["public/src/styles/reset.css", "public/src/styles/responsive.css"],
       "linter": {
         "rules": {
-          "complexity": { "noImportantStyles": "off" },
-          "style": { "noDescendingSpecificity": "off" }
+          "complexity": {
+            "noImportantStyles": "off"
+          },
+          "style": {
+            "noDescendingSpecificity": "off"
+          }
         }
       }
     }

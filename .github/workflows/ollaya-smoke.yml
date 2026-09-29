@@ -1,0 +1,69 @@
+name: Ollaya smoke test
+
+# Runs the manager against a real Ollaya (CPU image) with a real model. Not on
+# every PR: the first model pull is ~850 MB. Weekly, and on demand.
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      model:
+        description: Ollaya model to test with
+        default: laya:en
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      MODEL: ${{ inputs.model || 'laya:en' }}
+      OLLAYA_API_KEY: smoke-ollaya-key
+      OLLAYA_TYPESAFE_KEY: smoke-gateway-key
+      MASTER_KEY: smoke-master-key
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.11
+
+      # Model blobs survive between runs so only the first run downloads them.
+      - name: Cache Ollaya models
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/ollaya-models
+          key: ollaya-models-${{ env.MODEL }}
+
+      - name: Start Ollaya
+        run: |
+          mkdir -p "$RUNNER_TEMP/ollaya-models"
+          chmod 777 "$RUNNER_TEMP/ollaya-models"
+          docker run -d --name ollaya -p 11435:11435 \
+            -e OLLAYA_HOST=0.0.0.0 -e OLLAYA_API_KEY \
+            -v "$RUNNER_TEMP/ollaya-models:/home/ollaya/.ollaya/models" \
+            ghcr.io/ollaya-dev/ollaya
+          for _ in $(seq 60); do curl -fsS http://localhost:11435/ && break; sleep 1; done
+
+      - name: Install and build
+        run: |
+          bun install --frozen-lockfile
+          bun run build:web
+
+      - name: Start the manager
+        run: |
+          OLLAYA_HOST=http://localhost:11435 OLLAMA_HOST=http://localhost:11434 \
+            nohup bun run src/index.ts > manager.log 2>&1 &
+          for _ in $(seq 30); do curl -fsS http://localhost:3000/health && break; sleep 1; done
+
+      - name: Smoke test
+        run: MANAGER_URL=http://localhost:3000 SMOKE_MODEL="$MODEL" bun run scripts/ollaya-smoke.ts
+
+      - name: Logs
+        if: always()
+        run: |
+          cat manager.log || true
+          docker logs ollaya || true

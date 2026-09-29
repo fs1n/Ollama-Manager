@@ -1,5 +1,7 @@
 import { api, apiOk } from "../api";
+import { type BackendCapability, backendPath, modelKey } from "../utils/backends";
 import { escHtml } from "../utils/format";
+import { backendsWith, ensureBackends, getBackend, hasMultipleBackends } from "./backends";
 
 export interface OllamaModelDetails {
   parameter_size?: string;
@@ -7,87 +9,131 @@ export interface OllamaModelDetails {
   family?: string;
   families?: string[];
   context_length?: number;
+  /** Ollaya: "onnx", "gguf" or "router" */
+  format?: string;
 }
 
 export interface OllamaModel {
   name: string;
   size?: number;
   size_vram?: number;
-  expires_at?: string;
+  /** Ollaya sends null for "kept loaded forever" */
+  expires_at?: string | null;
   modified_at?: string;
   details?: OllamaModelDetails;
+  /** Ollaya /api/ps: "cpu", "cuda:0", "metal", … */
+  device?: string;
+  context_length?: number;
+}
+
+/** A model together with the backend it lives on. */
+export interface BackendModel extends OllamaModel {
+  backend: string;
+  /** `${backend}/${name}` — unique across backends */
+  key: string;
 }
 
 // Shared across Models, Running, Chat/Generate/Embeddings and Catalog pages —
 // all of them read the installed-model list, so it lives here rather than
-// inside any one page module.
-export let modelCache: OllamaModel[] = [];
-export let runningNames: Set<string> = new Set();
+// inside any one page module. It aggregates every backend.
+export let modelCache: BackendModel[] = [];
+export let runningKeys: Set<string> = new Set();
+/** Last error per backend id from the most recent tags/ps fetch */
+export const backendErrors = new Map<string, string>();
 
-let modelsPromise: Promise<OllamaModel[]> | null = null;
+let modelsPromise: Promise<BackendModel[]> | null = null;
 
-// ES module bindings are read-only from the importer's side, so a page that
-// already has the fetched list in hand (loadDashboard fetches /api/tags and
-// /api/ps together, rather than going through fetchModels()) sets it back
-// through this rather than assigning the imported binding directly.
-export function setModelCache(models: OllamaModel[]): void {
-  modelCache = models;
+// Fetches the same endpoint from every backend in parallel. A backend that
+// fails only records an error; the others' results are still returned.
+async function fetchFromAll(path: string, strict: boolean): Promise<BackendModel[]> {
+  const list = await ensureBackends();
+  const results = await Promise.allSettled(
+    list.map(async (b) => {
+      const url = backendPath(b.id, path);
+      const r = strict ? await apiOk(url) : await api(url);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      return ((d.models || []) as OllamaModel[]).map(
+        (m): BackendModel => ({ ...m, backend: b.id, key: modelKey(b.id, m.name) }),
+      );
+    }),
+  );
+  const out: BackendModel[] = [];
+  results.forEach((res, i) => {
+    const id = list[i]?.id;
+    if (!id) return;
+    if (res.status === "fulfilled") {
+      backendErrors.delete(id);
+      out.push(...res.value);
+    } else {
+      backendErrors.set(id, res.reason instanceof Error ? res.reason.message : String(res.reason));
+    }
+  });
+  return out;
 }
 
-export async function fetchModels(): Promise<OllamaModel[]> {
-  const r = await apiOk("/api/tags");
-  const d = await r.json();
-  modelCache = d.models || [];
+export async function fetchModels(): Promise<BackendModel[]> {
+  modelCache = await fetchFromAll("/tags", true);
   return modelCache;
 }
 
 export async function ensureModels(): Promise<void> {
   if (modelCache.length) return;
-  if (!modelsPromise) modelsPromise = fetchModels().catch(() => modelCache);
+  if (!modelsPromise) {
+    modelsPromise = fetchModels()
+      .catch(() => modelCache)
+      .finally(() => {
+        modelsPromise = null;
+      });
+  }
   await modelsPromise;
 }
 
-// Best-effort: a failed /api/ps degrades to "nothing running" rather than
-// throwing, since callers (Running page, Catalog running-dot/filter) treat an
-// empty list as a normal state, not an error.
-export async function refreshRunning(): Promise<OllamaModel[]> {
+// Best-effort: a failed /ps degrades to "nothing running" for that backend
+// rather than throwing, since callers (Running page, Catalog running-dot/filter)
+// treat an empty list as a normal state, not an error.
+export async function refreshRunning(): Promise<BackendModel[]> {
   try {
-    const r = await api("/api/ps");
-    if (r.ok) {
-      const d = await r.json();
-      const models: OllamaModel[] = d.models || [];
-      runningNames = new Set(models.map((m) => m.name));
-      return models;
-    }
+    const models = await fetchFromAll("/ps", false);
+    runningKeys = new Set(models.map((m) => m.key));
+    return models;
   } catch {
-    // network error — degrade quietly, same as refreshRunning's original behavior
+    return [];
   }
-  return [];
 }
 
-// loadDashboard() fetches /api/ps itself (alongside /api/tags, in parallel)
-// rather than calling refreshRunning() — this keeps that Set in sync either way.
-export function setRunningNames(names: Set<string>): void {
-  runningNames = names;
+export function modelsOnBackend(backend: string): BackendModel[] {
+  return modelCache.filter((m) => m.backend === backend);
 }
 
 let lastModelCacheKey = "";
-const MODEL_SELECT_IDS = ["chat-model", "gen-model", "embed-model"];
+const MODEL_SELECTS: [string, BackendCapability][] = [
+  ["chat-model", "chat"],
+  ["gen-model", "generate"],
+  ["embed-model", "embed"],
+];
 
-// Keyed by name, not just count — deleting one model and pulling another
+// Keyed by model key, not just count — deleting one model and pulling another
 // (count unchanged) must still refresh the dropdowns, otherwise they can keep
-// offering a model that was just deleted.
+// offering a model that was just deleted. Each dropdown only offers models from
+// backends that support that page (chat/generate/embed are Ollama-only).
 export function populateModelSelects(): void {
-  const key = modelCache.map((m) => m.name).join("\n");
+  const key = modelCache.map((m) => m.key).join("\n");
   if (key === lastModelCacheKey) return;
   lastModelCacheKey = key;
-  for (const id of MODEL_SELECT_IDS) {
+  const showBackend = hasMultipleBackends();
+  for (const [id, cap] of MODEL_SELECTS) {
     const sel = document.getElementById(id) as HTMLSelectElement | null;
     if (!sel) continue;
+    const allowed = new Set(backendsWith(cap).map((b) => b.id));
+    const models = modelCache.filter((m) => allowed.has(m.backend));
     const cur = sel.value;
-    sel.innerHTML = modelCache.length
-      ? modelCache
-          .map((m) => `<option value="${escHtml(m.name)}">${escHtml(m.name)}</option>`)
+    sel.innerHTML = models.length
+      ? models
+          .map((m) => {
+            const suffix = showBackend ? ` · ${getBackend(m.backend)?.label ?? m.backend}` : "";
+            return `<option value="${escHtml(m.key)}">${escHtml(m.name + suffix)}</option>`;
+          })
           .join("")
       : '<option value="">— no models —</option>';
     if (cur) sel.value = cur;
