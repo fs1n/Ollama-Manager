@@ -21,9 +21,9 @@ macht:
 | `DELETE /api/delete`, `POST /api/copy` | ✓ | ✓ | unverändert |
 | `POST /api/show` | ✓ | ✓ aber **ohne** `template`, **mit** `questions`, `router`, `capabilities` (`choice/score/noul/act`), `model_info` | Detail-Modal anpassen |
 | `POST /api/create` | Modelfile + `files`/Blobs | strukturiertes JSON (`from`, `questions`, `calibration`, `parameters`, `license`, `description`) | eigenes Formular (optional, Phase 3) |
-| `/api/chat`, `/api/generate`, `/api/embed` | ✓ | **404** | für Ollaya ausblenden |
+| `/api/chat`, `/api/generate`, `/api/embed` | ✓ | **404** | nur Ollama-Modelle anbieten |
 | `POST /api/decide` | – | **neu** | neue Seite "Decide" |
-| `/v1/systemone`, `/v1/decisions`, `/v1/models` | – | TypeSafe-kompatibel | optional durchreichen |
+| `/v1/systemone`, `/v1/decisions`, `/v1/models` | – | TypeSafe-kompatibel | durchreichen (auch relevant für LiteLLM, siehe §4) |
 
 Weitere Unterschiede, die wir abfangen müssen:
 
@@ -42,140 +42,222 @@ Weitere Unterschiede, die wir abfangen müssen:
 - **Katalog**: ollaya.dev liefert einen statischen JSON-Index unter
   `https://ollaya.dev/search.json` (`models[].name/description/caps/rank/updated/tags[]`) – kein
   HTML-Scraping nötig.
-- **LiteLLM**: Decision Models sind keine Chat/Completion-Modelle; ein Sync nach LiteLLM ergibt
-  keinen Sinn. → Bewusst **ausser Scope**.
 
-## 2. Architekturentscheidung
+## 2. Architektur: Ollama und Ollaya parallel
 
-**Empfehlung: Ollaya als optionales, zweites Backend neben Ollama** (nicht als Ersatz).
+**Entscheidung: kein Umschalter.** Die UI zeigt immer **alle konfigurierten Backends
+gleichzeitig**. Jedes Modell, jeder laufende Prozess und jeder Pull gehört sichtbar zu einem
+Backend, und Aktionen gehen automatisch an das richtige Backend.
 
-- Neue Env-Variablen: `OLLAYA_HOST` (unset = Feature aus) und `OLLAYA_API_KEY` (optional).
-- Da Ollama und Ollaya dieselben Pfade (`/api/tags`, `/api/pull`, …) verwenden, bekommt Ollaya
-  einen eigenen Proxy-Präfix: **`/api/ollaya/*` → `${OLLAYA_HOST}/api/*`** (und
-  `/api/ollaya/v1/*` → `${OLLAYA_HOST}/v1/*`). Der bestehende Ollama-Proxy bleibt unverändert,
-  keine Breaking Changes.
-- Im Frontend gibt es einen **Backend-Umschalter** (Ollama | Ollaya) im Header/der Sidebar, der nur
-  erscheint, wenn der Server Ollaya als konfiguriert meldet. Die Seiten Models, Running, Pull, Copy,
-  Dashboard und Catalog arbeiten dann gegen das gewählte Backend; Chat/Generate/Embed werden bei
-  Ollaya ausgeblendet und durch "Decide" ersetzt.
+### 2.1 Backend-Registry (Server)
 
-Verworfene Alternativen:
+- Neue Env-Variablen: `OLLAYA_HOST` (unset = Ollaya aus) und `OLLAYA_API_KEY` (optional).
+- Intern eine Liste statt Einzelwerte, damit später weitere Instanzen (z.B. zwei GPU-Hosts)
+  ohne Umbau dazukommen können:
 
-- *`OLLAMA_HOST` einfach auf Ollaya zeigen lassen*: funktioniert heute schon teilweise (Tags, Pull,
-  Delete), aber Chat bricht, `show` zeigt Unsinn, Katalog zeigt Ollama-Modelle – kein echter Support.
-- *Mode-Flag `BACKEND=ollama|ollaya`*: einfacher, erlaubt aber nicht, beide Instanzen aus einer UI
-  zu verwalten (typisch: beide laufen auf demselben GPU-Host).
+  ```ts
+  type BackendKind = "ollama" | "ollaya";
+  interface Backend {
+    id: string;          // "ollama", "ollaya" – stabil, erscheint in URLs
+    kind: BackendKind;
+    label: string;       // "Ollama", "Ollaya"
+    baseUrl: string;     // OLLAMA_HOST / OLLAYA_HOST
+    apiKey?: string;     // OLLAYA_API_KEY, nur serverseitig
+    prefix: string;      // "/api" bzw. "/api/ollaya"
+  }
+  ```
+
+- **Proxy-Präfixe**: Ollama bleibt unter `/api/*` (keine Breaking Changes für bestehende
+  API-Clients). Ollaya bekommt **`/api/ollaya/*` → `${OLLAYA_HOST}/api/*`** und
+  **`/api/ollaya/v1/*` → `${OLLAYA_HOST}/v1/*`**. Präfix nötig, weil beide dieselben Pfade
+  (`/api/tags`, `/api/pull`, …) haben.
+- **`GET /api/backends`** (hinter dem Auth-Gate) liefert pro Backend `id`, `kind`, `label`,
+  `prefix`, `status` (`connected`/`unreachable`), `version` und die **Fähigkeiten**:
+  `ollama` → `chat`, `generate`, `embed`, `create-modelfile`; `ollaya` → `decide`,
+  `create-questions`. Das Frontend blendet Features anhand der Fähigkeiten ein, nicht anhand
+  des Backend-Namens.
+
+### 2.2 Datenmodell im Frontend
+
+- `public/src/state/backends.ts`: lädt `/api/backends` einmal beim Start (und bei Reconnect),
+  bietet `backendUrl(backendId, "/tags")` → `/api/tags` bzw. `/api/ollaya/tags`.
+- `public/src/state/models.ts` wird **aggregiert**: `/api/tags` und `/api/ps` werden für alle
+  Backends **parallel** mit `Promise.allSettled` geholt. Jedes Modell bekommt ein Feld
+  `backend`; der eindeutige Schlüssel ist `${backend}/${name}` (derselbe Name, z.B. `nli`, kann
+  in beiden Backends existieren).
+- **Teilausfälle**: Ist ein Backend nicht erreichbar, zeigen die Seiten die Modelle der anderen
+  weiter an und darüber einen Hinweis-Banner ("Ollaya nicht erreichbar – letzter Fehler …").
+  Kein Backend blockiert das andere; jedes hat sein eigenes Timeout.
+
+### 2.3 Seiten im Parallelbetrieb
+
+| Seite | Verhalten |
+|---|---|
+| **Dashboard** | Eine Karte pro Backend (Status, Version, Anzahl Modelle, laufende Modelle, belegter RAM/VRAM) plus eine Summenzeile. Polling beider Backends unabhängig. |
+| **Models** | Eine gemeinsame Tabelle mit Spalte/Badge **Backend** und Filter-Chips *Alle / Ollama / Ollaya* (Auswahl in `localStorage`). Zusatzspalten `format` (gguf/onnx/router) und Quantisierung. Show/Delete/Copy gehen an das Backend des Modells. |
+| **Running** | Gemeinsame Liste mit Backend-Badge; `device` (cpu/cuda:0/metal) und `expires_at: null` → "forever". *Unload*: Ollama wie bisher, Ollaya über `POST /api/ollaya/decide {model, keep_alive: 0}`. |
+| **Pull** | Eingabefeld + **Ziel-Backend-Auswahl** (Default: Ollama; Vorschlag anhand bekannter Namen aus dem Ollaya-Katalog). Mehrere Pulls können gleichzeitig laufen, jeder mit Backend-Badge im Fortschritt. |
+| **Copy** | Nur innerhalb desselben Backends (Quell-Modell bestimmt das Backend). |
+| **Catalog** | Zwei Quellen nebeneinander: *ollama.com* und *ollaya.dev*, als Tabs oder Quellen-Filter. Ein Klick auf "Pull" geht automatisch an das passende Backend; "installiert" wird pro Backend geprüft. |
+| **Chat / Generate / Embeddings** | Modell-Dropdown zeigt nur Modelle von Backends mit Fähigkeit `chat`/`generate`/`embed` (also Ollama). |
+| **Decide** (neu) | Modell-Dropdown nur mit Modellen von Backends mit Fähigkeit `decide` (Ollaya). |
+| **LiteLLM** | Zwei Abschnitte: Ollama-Sync (wie bisher) und Ollaya-über-TypeSafe-Pass-through (siehe §4). |
+
+Nav-Einträge erscheinen, sobald **mindestens ein** Backend die Fähigkeit hat; ist Ollaya nicht
+konfiguriert, sieht die UI exakt aus wie heute.
+
+### 2.4 Verworfene Alternativen
+
+- *Globaler Umschalter Ollama/Ollaya*: einfacher, aber man sieht nie beide gleichzeitig und muss
+  für einen Überblick ständig hin- und herwechseln.
+- *`OLLAMA_HOST` auf Ollaya zeigen lassen*: Tags/Pull/Delete funktionieren zufällig, Chat bricht,
+  `show` und Katalog passen nicht – kein echter Support.
+- *Modelllisten serverseitig zusammenführen* (`/api/all/tags`): spart Requests, versteckt aber
+  Teilausfälle und bricht die 1:1-Kompatibilität des Proxys. Aggregation im Frontend ist
+  transparenter.
 
 ## 3. Umsetzung in Phasen
 
 ### Phase 1 – Backend-Grundlage (`src/`)
 
-1. **Config** in `src/index.ts`: `OLLAYA_HOST` (Default: unset; ohne Schema `http://` annehmen,
-   ohne Port `11435`), `OLLAYA_API_KEY`, `OLLAYA_ENABLED`.
-2. **Proxy verallgemeinern**: `forwardToOllama(req)` → `forwardUpstream(req, upstream)` mit
-   `{ baseUrl, pathRewrite, extraHeaders }`. Header-Stripping (`origin`, `referer`, `cookie`)
-   bleibt für beide Ziele identisch. Für Ollaya:
+1. **Config + Registry** in `src/index.ts` (oder neu `src/backends.ts`): `OLLAYA_HOST` (ohne Schema
+   `http://` annehmen, ohne Port `11435`), `OLLAYA_API_KEY`, Liste `BACKENDS`.
+2. **Proxy verallgemeinern**: `forwardToOllama(req)` → `forwardUpstream(req, backend, path)`.
+   Header-Stripping (`origin`, `referer`, `cookie`) bleibt für alle Backends identisch. Für Ollaya:
    - eingehendes `Authorization` löschen und, falls gesetzt, `Authorization: Bearer
      ${OLLAYA_API_KEY}` serverseitig setzen (der Key verlässt nie den Server);
    - `STREAMING_API_PATHS` gilt für die umgeschriebenen Pfade (`/api/pull`, `/api/create`).
 3. **Routing** in `handleRequest()`: `/api/ollaya/...` **nach** dem `MASTER_KEY`-Auth-Gate
-   behandeln (Reihenfolge laut CLAUDE.md beibehalten), vor dem Ollama-Fallback. Wenn Ollaya nicht
-   konfiguriert ist: `404 {"error":"Ollaya not configured"}`.
-   Pfad-Whitelist: nur bekannte Ollaya-Pfade durchreichen (`version`, `tags`, `ps`, `show`, `pull`,
-   `delete`, `copy`, `create`, `decide`, `v1/systemone`, `v1/decisions`, `v1/models`), kein
-   Path-Traversal über `..`.
-4. **Capabilities-Endpoint**: `/api/app-version` (oder neu `/api/backends`, hinter dem Auth-Gate)
-   liefert `{ ollama: true, ollaya: OLLAYA_ENABLED }`, damit das Frontend den Umschalter anzeigen kann.
-5. **`/health`**: zusätzlich `ollaya: "connected" | "unreachable" | "disabled"` und `ollayaVersion`
-   via `GET ${OLLAYA_HOST}/api/version` (2s-Timeout, mit Bearer-Key). HTTP-Status bleibt 200.
-6. **Katalog**: `/api/catalog/ollaya` holt `https://ollaya.dev/search.json`, validiert/normalisiert
-   es (neue Funktion in `src/library.ts`, z.B. `parseOllayaSearchIndex()`), In-Memory-Cache 1 h wie
-   beim Ollama-Katalog. Tags kommen direkt aus `models[].tags[]`, eine Detail-Route ist zunächst
-   nicht nötig.
-7. **OpenAPI-Spec** um die neuen Routen ergänzen; Startup-Log um `ollaya: OLLAYA_HOST` erweitern.
+   behandeln (Reihenfolge laut CLAUDE.md beibehalten), vor dem Ollama-Fallback. Nicht
+   konfiguriert → `404 {"error":"Ollaya not configured"}`. Pfad-Whitelist: nur bekannte Pfade
+   (`version`, `tags`, `ps`, `show`, `pull`, `delete`, `copy`, `create`, `decide`,
+   `v1/systemone`, `v1/decisions`, `v1/models`), kein Path-Traversal über `..`.
+4. **`GET /api/backends`** wie in §2.1 (Status-Probe mit 2s-Timeout, parallel).
+5. **`/health`**: zusätzlich `backends: [{id, status, version}]`; die bisherigen Felder `ollama`
+   und `ollamaVersion` bleiben für Kompatibilität (Docker-Healthcheck). HTTP-Status bleibt 200.
+6. **Katalog**: `/api/catalog/ollaya` holt `https://ollaya.dev/search.json`, normalisiert es
+   (neu in `src/library.ts`: `parseOllayaSearchIndex()`), In-Memory-Cache 1 h wie beim
+   Ollama-Katalog.
+7. **OpenAPI-Spec** um die neuen Routen ergänzen; Startup-Log listet alle Backends; die
+   `MASTER_KEY`-Warnung erwähnt auch Ollaya.
 8. **Tests** (`src/*.test.ts`): Pfad-Rewrite und Whitelist, Header-Stripping + Bearer-Injection,
-   Auth-Gate greift auch für `/api/ollaya/*`, 404 wenn deaktiviert, Parser für `search.json`
-   (Fixture), Health-Ausgabe.
+   Auth-Gate greift auch für `/api/ollaya/*`, 404 wenn deaktiviert, `/api/backends` bei
+   erreichbarem/unerreichbarem Backend, Parser für `search.json` (Fixture).
 
-### Phase 2 – Frontend: Verwaltung (`public/src/`)
+### Phase 2 – Frontend: parallele Verwaltung (`public/src/`)
 
-1. **Backend-State**: neues Modul `public/src/state/backend.ts` (`currentBackend`, `apiBase()` →
-   `/api` oder `/api/ollaya`, Change-Event). Auswahl im `localStorage` merken (in `try/catch`).
-2. **`api.ts`**: Hilfsfunktion `backendPath("/tags")`; Fehlertext aus `error` wie bisher, bei
-   Ollaya zusätzlich `code` und die `detail[].msg` anzeigen.
-3. **`state/models.ts`**: Cache pro Backend (sonst mischen sich Modelllisten beim Umschalten).
-4. **Umschalter-UI** in `public/index.html` + `nav.ts`: Segment-Control "Ollama | Ollaya",
-   nur sichtbar, wenn der Server Ollaya meldet. Beim Wechsel aktuelle Seite neu laden;
-   Nav-Einträge Chat/Generate/Embeddings/LiteLLM bei Ollaya ausblenden, "Decide" einblenden.
-   Keine Inline-Handler (CSP) – Event-Delegation wie bestehend.
-5. **Dashboard**: Status beider Backends anzeigen (aus `/health`), Kennzahlen aus dem aktiven
-   Backend.
-6. **Models-Seite**: Spalten `format` (onnx/gguf/router), `parameter_size`, `quantization_level`;
-   Router markieren. Detail-Modal für Ollaya: `capabilities`, `questions` (eingebettetes Schema),
-   `router.routes`, `model_info` (`general.languages`, `general.source`), `license`,
-   `parameters` statt `template`.
-7. **Running-Seite**: `expires_at: null` → "forever", `device` (cpu/cuda:0/metal) und
-   `context_length` anzeigen; "Unload" via `POST /api/decide {model, keep_alive: 0}` (ohne `state`).
-8. **Pull-Seite**: gleicher NDJSON-Reader; Texte "from ollaya.dev"; Hinweis, dass ein Router seine
-   Ziele mitpullt. Pre-Stream-HTTP-Fehler (404 "not found in registry", 502) sauber anzeigen.
-9. **Copy/Delete**: unverändert, nur gegen `apiBase()`.
-10. **Catalog-Seite**: zweite Datenquelle `/api/catalog/ollaya`; Karten mit `description`, `caps`,
-    Featured-Tags; Sortierung nach `rank` (kein Pull-Count vorhanden). Klick → Pull gegen Ollaya.
+1. `state/backends.ts` + aggregiertes `state/models.ts` (§2.2).
+2. **`api.ts`**: bei Ollaya-Fehlern zusätzlich `code` und `detail[].msg` anzeigen.
+3. Wiederverwendbare **Backend-Badge**-Komponente und Filter-Chips (Event-Delegation,
+   keine Inline-Handler wegen CSP).
+4. Seiten gemäss Tabelle §2.3 umbauen: Dashboard, Models (inkl. Detail-Modal mit `capabilities`,
+   `questions`, `router.routes`, `model_info`, `license`, `parameters` für Ollaya), Running, Pull,
+   Copy, Catalog, Modell-Dropdowns in Chat/Generate/Embed nach Fähigkeit filtern.
+5. **Tests** für die reinen Hilfsfunktionen (Aggregation, Schlüsselbildung, Filter,
+   `expires_at`-Formatierung) in `public/src/utils`.
 
-### Phase 3 – Frontend: Decide-Playground (neu, `public/src/pages/decide.ts`)
+### Phase 3 – Decide-Playground (`public/src/pages/decide.ts`)
 
-1. Modell-Auswahl (aus Ollaya-`/api/tags`), Textarea für `state` (Text oder JSON), Frage-Editor:
-   Liste von Fragen mit Id, Typ (`choice`/`score`/`noul`), `instructions`, `criteria`
-   (Label→Beschreibung bzw. Level-Liste). Alternativ Roh-JSON-Editor.
-2. Wenn `/api/show` eingebettete `questions` liefert: vorbefüllen und "Built-in questions
-   verwenden" anbieten (dann `questions` weglassen).
-3. Presets (z.B. Support-Triage wie im Ollaya-README) als Startpunkt.
-4. `POST /api/ollaya/decide` (nicht streamend, per AbortController abbrechbar); optional
-   `extras: ["laya"]`, `keep_alive`, Bild-Upload für Vision-Modelle (`capabilities`/`decider:2b-vision`,
-   Base64-PNG in `images`).
-5. Ergebnis-Rendering: pro Frage Balken der `probabilities`, hervorgehobene `choice`/`score`/`noul`,
-   `confidence`, `routing` (bei `laya`), `state_truncated`-Warnung, `usage.input_tokens`,
-   `load_duration`/`eval_duration` (ns → ms).
-6. Validierungsfehler (`422` mit `detail[].loc`) direkt an der betroffenen Frage anzeigen.
-7. Optional: "Als Modell speichern" → `POST /api/ollaya/create` mit `from` + aktuellem Fragen-Set
-   (+ `parameters.precision`, `description`), Fortschritt über den NDJSON-Reader.
+1. Modell-Auswahl (Ollaya-Modelle), Textarea für `state` (Text oder JSON), Frage-Editor:
+   Fragen mit Id, Typ (`choice`/`score`/`noul`), `instructions`, `criteria`; alternativ Roh-JSON.
+2. Liefert `/api/show` eingebettete `questions`: vorbefüllen oder "Built-in questions verwenden".
+3. Presets (z.B. Support-Triage wie im Ollaya-README).
+4. `POST /api/ollaya/decide` (per AbortController abbrechbar); optional `extras: ["laya"]`,
+   `keep_alive`, Bild-Upload (Base64-PNG in `images`) für Vision-Modelle.
+5. Ergebnis: pro Frage Wahrscheinlichkeitsbalken, `choice`/`score`/`noul`, `confidence`,
+   `routing` (bei `laya`), `state_truncated`-Warnung, Tokens, Lade-/Rechenzeit (ns → ms).
+   Hinweis "Modell wird geladen …" beim Kaltstart.
+6. Validierungsfehler (`422`, `detail[].loc`) direkt an der betroffenen Frage.
+7. Optional: "Als Modell speichern" → `POST /api/ollaya/create` mit `from` + Fragen-Set.
 
-### Phase 4 – Betrieb, Doku, CI
+### Phase 4 – LiteLLM (siehe §4)
 
-1. **README** + **CLAUDE.md**: neue Env-Variablen (`OLLAYA_HOST`, `OLLAYA_API_KEY`), Architektur
-   (zweiter Proxy-Präfix), Hinweis dass LiteLLM nur Ollama betrifft.
+1. LiteLLM-Seite in zwei Abschnitte teilen: *Ollama → Model-Sync* (unverändert) und
+   *Ollaya → TypeSafe-Pass-through*.
+2. Ollaya-Abschnitt: **Prüfung statt Sync**. Der Server ruft `GET ${LITELLM_URL}/typesafe/v1/models`
+   mit `LITELLM_KEY` auf und vergleicht mit `GET ${OLLAYA_HOST}/v1/models`:
+   - gleiche Modelle → "Ollaya ist über LiteLLM erreichbar" (grün);
+   - andere Modelle (z.B. `jev-latest`) → "LiteLLM zeigt auf TypeSafe-Cloud, nicht auf Ollaya";
+   - 404 → "LiteLLM-Version ohne TypeSafe-Pass-through (ab v1.103.0-rc)".
+3. Setup-Anleitung in der UI mit den nötigen LiteLLM-Env-Variablen (vorbefüllt mit
+   `OLLAYA_HOST`).
+4. Neue Route `GET /api/litellm/ollaya-status`; Tests mit gemockten Upstreams.
+
+### Phase 5 – Doku, Betrieb, CI
+
+1. **README** + **CLAUDE.md**: neue Env-Variablen, Backend-Registry, `/api/ollaya/*`,
+   `/api/backends`, LiteLLM-Hinweise.
 2. **docker-compose.yml**: optionaler `ollaya`-Service (`ghcr.io/ollaya-dev/ollaya`, bzw. `:cuda`)
-   bzw. `OLLAYA_HOST=http://host.docker.internal:11435`. Hinweis: Ollaya auf dem Host bindet
-   standardmässig nur `127.0.0.1` → für Docker `OLLAYA_HOST=0.0.0.0` + `OLLAYA_API_KEY` setzen.
-3. **Dockerfile**: keine Änderung nötig.
-4. **CI**: bestehende Lint/Typecheck/Build/Test-Pipeline deckt alles ab; optional ein
-   Integrations-Job mit dem CPU-Image von Ollaya und einem kleinen Modell (Smoke-Test Pull → Tags
-   → Decide) – wegen Download-Grösse (hunderte MB) eher manuell/nightly.
+   oder `OLLAYA_HOST=http://host.docker.internal:11435`. Ollaya auf dem Host bindet standardmässig
+   nur `127.0.0.1` → für Docker `OLLAYA_HOST=0.0.0.0` + `OLLAYA_API_KEY` setzen.
+3. **CI**: bestehende Pipeline deckt alles ab; optional ein manueller/nächtlicher Smoke-Test mit
+   dem CPU-Image von Ollaya (Pull → Tags → Decide), da Modelle hunderte MB gross sind.
 
-## 4. Risiken und offene Fragen
+## 4. LiteLLM und Decision Models
 
-- **API-Stabilität**: Ollaya ist jung; die Doku nennt sich aber "normative contract" und
-  versioniert (§12). Wir verlassen uns nur auf dokumentierte Felder und behandeln unbekannte
-  defensiv.
-- **`search.json`** ist als Navbar-Typeahead gedacht, nicht als offizielle API – Format kann sich
-  ändern. Parser tolerant bauen, bei Fehler leere Liste + Hinweis statt Absturz.
-- **Sicherheit**: `/api/ollaya/*` erlaubt Pull/Delete/Create – gleiche Risiken wie beim
-  Ollama-Proxy. Die bestehende `MASTER_KEY`-Warnung auf Ollaya ausweiten.
-- **Idle-Timeout**: `/api/decide` streamt nicht; grosse Modelle können beim ersten Laden lange
-  brauchen (`OLLAYA_LOAD_TIMEOUT` Default 5 min). Unser `PROXY_CONNECT_TIMEOUT_MS` (10 min bis zu
-  den Response-Headern) reicht dafür; im Frontend einen Lade-Hinweis ("Modell wird geladen …")
-  anzeigen.
-- **Offen**: Soll der Umschalter pro Seite oder global sein? (Empfehlung: global.) Sollen beide
-  Backends gleichzeitig auf dem Dashboard erscheinen? (Empfehlung: ja, nur Status + Anzahl.)
+**Kurz: LiteLLM unterstützt Decision Models, aber nicht als registrierte Modelle – ein "Sync" wie
+bei Ollama ist deshalb weder möglich noch nötig.**
 
-## 5. Aufwandsschätzung
+- LiteLLM hat seit **v1.103.0-rc** eine TypeSafe-Integration (für Jev, das Cloud-Decision-Model,
+  dessen API Ollaya nachbildet). Das ist ein reiner **Pass-through**: Alles unter
+  `/typesafe/*` wird an `TYPESAFE_API_BASE` (Default `https://api.typesafe.ai`) weitergeleitet,
+  z.B. `POST /typesafe/v1/systemone`, `GET /typesafe/v1/models`. LiteLLM setzt dabei
+  `TYPESAFE_API_KEY` ein; Clients brauchen nur einen LiteLLM-Virtual-Key. Logging und
+  Kostenerfassung laufen über `usage.input_tokens` aus der Antwort.
+- Es gibt **keine** `model_list`-Einträge und kein `/model/new` dafür – LiteLLM leitet einfach
+  jede Modellbezeichnung durch.
+- Ollayas `/v1/systemone`, `/v1/decisions` und `/v1/models` sind laut Ollaya-Doku
+  **wire-identisch** mit TypeSafe. Damit genügt auf der LiteLLM-Seite:
+
+  ```sh
+  TYPESAFE_API_BASE=http://<ollaya-host>:11435
+  TYPESAFE_API_KEY=<OLLAYA_API_KEY>   # beliebiger Wert, falls Ollaya ohne Key läuft
+  ```
+
+  Danach sind alle lokal installierten Ollaya-Modelle automatisch über
+  `LITELLM/typesafe/v1/systemone` nutzbar, ohne dass der Manager etwas registrieren muss. Neu
+  gepullte Modelle sind sofort verfügbar.
+
+Einschränkungen, die wir in der UI erklären sollten:
+
+- **Nur ein Ziel**: `TYPESAFE_API_BASE` ist eine einzige Env-Variable – LiteLLM zeigt entweder
+  auf die TypeSafe-Cloud oder auf Ollaya, nicht auf beide.
+- **Nicht per API konfigurierbar**: Der Manager kann die Env-Variable von LiteLLM nicht setzen,
+  nur prüfen und anleiten.
+- **Kosten**: LiteLLMs Preistabelle kennt nur `typesafe/jev-*`; lokale Ollaya-Modelle werden
+  vermutlich mit 0 $ oder ohne Preis geloggt. Das ist für lokale Modelle korrekt, sollte aber
+  getestet werden.
+- **Kein OpenAI-Format**: Decision Models sind über `/chat/completions` nicht erreichbar – Clients
+  müssen den TypeSafe-SDK oder `/typesafe/v1/systemone` direkt nutzen.
+- **Nicht verifiziert**: Das Zusammenspiel LiteLLM ↔ Ollaya ist aus beiden Dokus abgeleitet, aber
+  noch nicht praktisch getestet. Erster Schritt von Phase 4 ist ein manueller Test.
+
+## 5. Risiken und offene Fragen
+
+- **API-Stabilität**: Ollaya ist jung; die Doku ist aber ein versionierter "normative contract"
+  (§12). Wir verlassen uns nur auf dokumentierte Felder und behandeln unbekannte defensiv.
+- **`search.json`** ist als Typeahead der Website gedacht, nicht als offizielle API. Parser
+  tolerant bauen, bei Fehler leere Liste + Hinweis statt Absturz.
+- **Sicherheit**: `/api/ollaya/*` erlaubt Pull/Delete/Create – gleiche Risiken wie der
+  Ollama-Proxy, gleicher Schutz durch `MASTER_KEY`.
+- **Last durch Parallel-Polling**: Das Dashboard fragt jetzt zwei Backends ab. Unkritisch
+  (`/api/tags`/`/api/ps` sind billig), aber Polling-Intervall pro Backend beibehalten und bei
+  unerreichbarem Backend mit Backoff abfragen.
+- **Namenskollisionen**: gleicher Modellname in beiden Backends → immer über
+  `${backend}/${name}` adressieren, in der UI per Badge unterscheiden.
+- **Offen**: Sollen später mehrere Instanzen pro Typ unterstützt werden (z.B.
+  `OLLAMA_HOSTS=gpu1=…,gpu2=…`)? Die Registry ist darauf vorbereitet, umgesetzt wird zunächst
+  je eine Instanz.
+
+## 6. Aufwandsschätzung
 
 | Phase | Umfang | Grobe Schätzung |
 |---|---|---|
-| 1 Backend | Proxy-Refactor, Routing, Health, Katalog, Tests | 1–1,5 Tage |
-| 2 Verwaltung | Backend-State, Umschalter, Anpassungen Models/Running/Pull/Catalog | 1,5–2 Tage |
-| 3 Decide-Playground | neue Seite inkl. Frage-Editor und Ergebnis-Ansicht (+ Create optional) | 2 Tage |
-| 4 Doku/Betrieb | README, CLAUDE.md, Compose | 0,5 Tage |
+| 1 Backend | Registry, Proxy-Refactor, Routing, `/api/backends`, Health, Katalog, Tests | 1,5 Tage |
+| 2 Parallele Verwaltung | aggregierter State, Badges/Filter, alle Verwaltungsseiten | 2–2,5 Tage |
+| 3 Decide-Playground | Frage-Editor, Ergebnis-Ansicht (+ Create optional) | 2 Tage |
+| 4 LiteLLM | Status-Prüfung + Anleitung, manueller Integrationstest | 0,5–1 Tag |
+| 5 Doku/Betrieb | README, CLAUDE.md, Compose | 0,5 Tage |
 
-Phase 1 + 2 liefern bereits vollwertiges Modell-Management für Ollaya; Phase 3 ist der eigentliche
-Mehrwert (Decision Models ausprobieren) und kann separat gemergt werden.
+Phase 1 + 2 liefern bereits vollwertiges paralleles Modell-Management; Phase 3 und 4 können
+separat gemergt werden.
