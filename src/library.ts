@@ -14,7 +14,7 @@
 //                              variant labels like "e2b"/"e4b" (Gemma), which we
 //                              split into `variants` so size filters stay honest
 
-import { parse as parseHtml } from "node-html-parser";
+import { type HTMLElement, parse as parseHtml } from "node-html-parser";
 
 export interface LibraryModel {
   name: string;
@@ -54,6 +54,36 @@ const SIZE_RE = /^\d+(?:\.\d+)?x\d+(?:\.\d+)?[bmk]$|^\d+(?:\.\d+)?[bmk]$/i;
 /** Splits a size-slot badge into sizes vs. non-param variants (e2b/e4b). */
 export function classifySizeBadge(label: string): "size" | "variant" {
   return SIZE_RE.test(label) ? "size" : "variant";
+}
+
+interface MetaSpans {
+  pulls: string;
+  tagCount: number;
+  updatedText: string;
+  updatedAt: string | null;
+}
+
+/**
+ * Reads the "<n> Pulls" / "<n> Downloads", "<n> Tags" and "Updated …" spans
+ * that both the index cards and the detail page use. One parser for both, and
+ * both pull labels accepted everywhere, so a relabel on ollama.com can't make
+ * just one of the two pages silently lose its numbers.
+ */
+function parseMetaSpans(spans: HTMLElement[]): MetaSpans {
+  const meta: MetaSpans = { pulls: "", tagCount: 0, updatedText: "", updatedAt: null };
+  for (const span of spans) {
+    const text = span.text.replace(/\u00a0/g, " ").trim();
+    const pulls = text.match(/^(.*?)\s*(?:Pulls|Downloads)$/);
+    if (pulls?.[1] !== undefined) {
+      meta.pulls = pulls[1].trim();
+    } else if (/\bTags$/.test(text)) {
+      meta.tagCount = parseInt(text.replace(/\s*Tags$/, "").trim(), 10) || 0;
+    } else if (/\bUpdated\b/.test(text)) {
+      meta.updatedText = text.replace(/^Updated\s*/, "").trim();
+      meta.updatedAt = parseUpdatedTitle(span.getAttribute("title") ?? "");
+    }
+  }
+  return meta;
 }
 
 /** "Aug 14, 2026 4:54 PM UTC" → ISO string, or null when unparseable. */
@@ -98,23 +128,9 @@ export function parseLibraryHtml(html: string): LibraryModel[] {
     }
 
     // Meta row: pulls count, tag count, updated (span with title="… UTC")
-    let pulls = "";
-    let tagCount = 0;
-    let updatedText = "";
-    let updatedAt: string | null = null;
-
-    const metaSpans = card.querySelectorAll("span.flex.items-center");
-    for (const span of metaSpans) {
-      const text = span.text.replace(/ /g, " ").trim();
-      if (/\bPulls$/.test(text)) {
-        pulls = text.replace(/\s*Pulls$/, "").trim();
-      } else if (/\bTags$/.test(text)) {
-        tagCount = parseInt(text.replace(/\s*Tags$/, "").trim(), 10) || 0;
-      } else if (/\bUpdated\b/.test(text)) {
-        updatedText = text.replace(/^Updated\s*/, "").trim();
-        updatedAt = parseUpdatedTitle(span.getAttribute("title") ?? "");
-      }
-    }
+    const { pulls, tagCount, updatedText, updatedAt } = parseMetaSpans(
+      card.querySelectorAll("span.flex.items-center"),
+    );
 
     models.push({
       name,
@@ -180,18 +196,9 @@ export function parseLibraryDetailHtml(html: string, name: string): LibraryModel
   }
 
   // Page-level meta: "<n> Downloads" and the updated span's title="… UTC"
-  let pulls = "";
-  let updatedText = "";
-  let updatedAt: string | null = null;
-  for (const span of root.querySelectorAll("span.flex.items-center")) {
-    const text = span.text.replace(/ /g, " ").trim();
-    if (/\bDownloads$/.test(text)) {
-      pulls = text.replace(/\s*Downloads$/, "").trim();
-    } else if (/\bUpdated\b/.test(text)) {
-      updatedText = text.replace(/^Updated\s*/, "").trim();
-      updatedAt = parseUpdatedTitle(span.getAttribute("title") ?? "");
-    }
-  }
+  const { pulls, updatedText, updatedAt } = parseMetaSpans(
+    root.querySelectorAll("span.flex.items-center"),
+  );
 
   return { name, tags, pulls, updatedText, updatedAt };
 }

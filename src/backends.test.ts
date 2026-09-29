@@ -92,14 +92,33 @@ describe("upstreamPathFor", () => {
 });
 
 describe("normalizeHost", () => {
-  test("adds scheme and default port like OLLAYA_HOST does", () => {
-    expect(normalizeHost("127.0.0.1", 11435)).toBe("http://127.0.0.1:11435");
-    expect(normalizeHost("ollaya:9000", 11435)).toBe("http://ollaya:9000");
-    expect(normalizeHost("http://host.docker.internal", 11435)).toBe(
+  test("adds scheme and, if given, the default port", () => {
+    expect(normalizeHost("127.0.0.1", "OLLAYA_HOST", 11435)).toBe("http://127.0.0.1:11435");
+    expect(normalizeHost("ollaya:9000", "OLLAYA_HOST", 11435)).toBe("http://ollaya:9000");
+    expect(normalizeHost("http://host.docker.internal", "OLLAYA_HOST", 11435)).toBe(
       "http://host.docker.internal:11435",
     );
-    expect(normalizeHost("https://ollaya.example.com/", 11435)).toBe("https://ollaya.example.com");
-    expect(normalizeHost(" http://h:1/prefix/ ", 11435)).toBe("http://h:1/prefix");
+    expect(normalizeHost("https://ollaya.example.com/", "OLLAYA_HOST", 11435)).toBe(
+      "https://ollaya.example.com",
+    );
+    expect(normalizeHost(" http://h:1/prefix/ ", "OLLAYA_HOST", 11435)).toBe("http://h:1/prefix");
+  });
+
+  test("without a default port the URL is taken literally (OLLAMA_HOST)", () => {
+    expect(normalizeHost("http://ollama.lan", "OLLAMA_HOST")).toBe("http://ollama.lan");
+    expect(normalizeHost("http://localhost:11434/", "OLLAMA_HOST")).toBe("http://localhost:11434");
+  });
+
+  test("rejects other schemes, queries, credentials and broken URLs, naming the variable", () => {
+    expect(() => normalizeHost("file:///etc/passwd", "OLLAYA_HOST")).toThrow(
+      /OLLAYA_HOST=.*http:\/\/ or https:\/\//,
+    );
+    expect(() => normalizeHost("http://h?x=y", "OLLAYA_HOST")).toThrow(/query/);
+    expect(() => normalizeHost("http://h#frag", "OLLAYA_HOST")).toThrow(/fragment/);
+    expect(() => normalizeHost("http://user:pw@h", "OLLAMA_HOST")).toThrow(/credentials/);
+    expect(() => normalizeHost("http://h:99999", "OLLAMA_HOST")).toThrow(
+      /OLLAMA_HOST=.*not a valid URL/,
+    );
   });
 });
 

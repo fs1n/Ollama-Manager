@@ -194,3 +194,46 @@ describe("parseOllayaSearchIndex — ollaya.dev /search.json", () => {
     expect(() => parseOllayaSearchIndex(null)).toThrow(/models array/);
   });
 });
+
+describe("parseLibraryHtml — size badges beyond plain billions (library-sample.html)", () => {
+  const models = parseLibraryHtml(fixture("library-sample.html"));
+  const byName = (n: string) => models.find((m) => m.name === n);
+
+  test("reads every card", () => {
+    expect(models.map((m) => m.name)).toEqual([
+      "alfred",
+      "llama3.2",
+      "gpt-oss",
+      "minimax-m2.7",
+      "mixtral",
+      "all-minilm",
+    ]);
+  });
+
+  test("mixture-of-experts sizes stay whole", () => {
+    expect(byName("mixtral")?.sizes).toEqual(["8x7b", "8x22b"]);
+  });
+
+  test("sub-billion sizes keep their unit", () => {
+    expect(byName("all-minilm")?.sizes).toEqual(["23m", "335m"]);
+    expect(byName("all-minilm")?.capabilities).toEqual(["embedding"]);
+  });
+
+  test("cloud-only models have no sizes but the cloud flag", () => {
+    expect(byName("minimax-m2.7")).toMatchObject({ sizes: [], isCloud: true });
+  });
+});
+
+describe("pull count labels", () => {
+  test("index cards and detail pages accept both Pulls and Downloads", () => {
+    const card = parseLibraryHtml(
+      fixture("library-llama3.1.html").replaceAll("Pulls", "Downloads"),
+    );
+    expect(card[0]?.pulls).not.toBe("");
+    const detail = parseLibraryDetailHtml(
+      fixture("library-llama3.1-detail.html").replaceAll("Downloads", "Pulls"),
+      "llama3.1",
+    );
+    expect(detail.pulls).not.toBe("");
+  });
+});

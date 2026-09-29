@@ -231,8 +231,12 @@ describe("with MASTER_KEY and both backends", () => {
     expect(ollama.seen.length).toBe(before);
   });
 
-  test("/health reports every backend and keeps the old fields", async () => {
-    const r = await fetch(`${manager.base}/health`);
+  test("/health is public but shows versions and inventory only with a session", async () => {
+    const anon = await fetch(`${manager.base}/health`);
+    expect(anon.status).toBe(200);
+    expect(await anon.json()).toEqual({ status: "ok", ollama: "connected" });
+
+    const r = await fetch(`${manager.base}/health`, authed());
     expect(await r.json()).toEqual({
       status: "ok",
       ollama: "connected",
@@ -242,6 +246,38 @@ describe("with MASTER_KEY and both backends", () => {
         { id: "ollaya", status: "connected", version: "0.4.0" },
       ],
     });
+  });
+
+  // A raw request line, because clients resolve ".." before sending. The
+  // server sees the resolved path (/api/tags) and gates it like any other.
+  test("dot segments resolve before routing and never skip the auth gate", async () => {
+    const { port } = new URL(manager.base);
+    const rawGet = (cookie: string) =>
+      new Promise<string>((resolve, reject) => {
+        Bun.connect({
+          hostname: "127.0.0.1",
+          port: Number(port),
+          socket: {
+            open(socket) {
+              socket.write(
+                `GET /api/backends/ollaya/../../tags HTTP/1.1\r\nHost: x\r\n${cookie}Connection: close\r\n\r\n`,
+              );
+            },
+            data(socket, chunk) {
+              resolve(new TextDecoder().decode(chunk).split("\r\n")[0] ?? "");
+              socket.end();
+            },
+            error(_socket, err) {
+              reject(err);
+            },
+          },
+        });
+      });
+    const before = ollama.seen.length + ollaya.seen.length;
+    expect(await rawGet("")).toBe("HTTP/1.1 401 Unauthorized");
+    expect(ollama.seen.length + ollaya.seen.length).toBe(before);
+    expect(await rawGet(`Cookie: om_session=${session}\r\n`)).toBe("HTTP/1.1 200 OK");
+    expect(lastSeen(ollama)?.path).toBe("/api/tags");
   });
 });
 

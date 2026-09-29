@@ -89,15 +89,31 @@ export function parseBackendRoute(pathname: string): { id: string; rest: string 
 }
 
 /**
- * Normalizes a host setting the way Ollaya's own OLLAYA_HOST does: "http://" is
- * assumed without a scheme, and a missing port means 11435 for http (443 for
- * https, which URL already implies). Returns the URL without a trailing slash.
+ * Validates and normalizes a host setting. "http://" is assumed without a
+ * scheme; only http and https are accepted. With `defaultPort`, a missing port
+ * on http means that port (Ollaya's OLLAYA_HOST behavior: 11435). A path is
+ * kept as a prefix; query and fragment are refused because every relayed path
+ * is appended to the result. Errors name the variable so a typo in the
+ * environment is obvious at startup.
  */
-export function normalizeHost(raw: string, defaultPort: number): string {
+export function normalizeHost(raw: string, variable: string, defaultPort?: number): string {
   const trimmed = raw.trim();
   const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
-  const url = new URL(withScheme);
-  if (!url.port && url.protocol === "http:") url.port = String(defaultPort);
+  let url: URL;
+  try {
+    url = new URL(withScheme);
+  } catch {
+    throw new Error(`${variable}=${JSON.stringify(raw)} is not a valid URL`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error(`${variable}=${JSON.stringify(raw)} must use http:// or https://`);
+  }
+  if (url.search || url.hash || url.username || url.password) {
+    throw new Error(
+      `${variable}=${JSON.stringify(raw)} must not contain a query, fragment or credentials`,
+    );
+  }
+  if (defaultPort && !url.port && url.protocol === "http:") url.port = String(defaultPort);
   return url.toString().replace(/\/+$/, "");
 }
 
@@ -107,7 +123,9 @@ export function loadBackends(env: Record<string, string | undefined>): Backend[]
       id: "ollama",
       kind: "ollama",
       label: "Ollama",
-      baseUrl: (env.OLLAMA_HOST || "http://localhost:11434").replace(/\/$/, ""),
+      // No default port here: OLLAMA_HOST has always been taken literally, and
+      // e.g. an Ollama behind a reverse proxy on port 80 must keep working.
+      baseUrl: normalizeHost(env.OLLAMA_HOST || "http://localhost:11434", "OLLAMA_HOST"),
     },
   ];
 
@@ -118,7 +136,7 @@ export function loadBackends(env: Record<string, string | undefined>): Backend[]
       id: "ollaya",
       kind: "ollaya",
       label: "Ollaya",
-      baseUrl: normalizeHost(ollayaHost, 11435),
+      baseUrl: normalizeHost(ollayaHost, "OLLAYA_HOST", 11435),
       ...(apiKey ? { apiKey } : {}),
     });
   }
@@ -126,15 +144,49 @@ export function loadBackends(env: Record<string, string | undefined>): Backend[]
   return backends;
 }
 
+// Hop-by-hop headers (RFC 9110 §7.6.1) describe one connection, never the
+// next one: the manager's connection to the backend is its own. Plus the
+// forwarding family, which the manager has not verified and must not vouch for.
+const HOP_BY_HOP = [
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "proxy-connection",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+];
+const FORWARDING = [
+  "forwarded",
+  "x-forwarded-for",
+  "x-forwarded-host",
+  "x-forwarded-proto",
+  "x-real-ip",
+];
+
+function stripHopByHop(headers: Headers): void {
+  // Names listed in Connection are hop-by-hop too (e.g. "Connection: x-foo").
+  for (const name of (headers.get("connection") || "").split(",")) {
+    const n = name.trim().toLowerCase();
+    if (n) headers.delete(n);
+  }
+  for (const name of HOP_BY_HOP) headers.delete(name);
+}
+
 /**
  * Headers for the upstream request. The manager is the HTTP client here, so
  * browser-originated headers go: Origin/Referer would trip the backends' origin
  * checks, and the manager's own session (cookie or x-session-token) must never
- * leak to a service that has no use for it. For a backend with an API key the
- * caller's Authorization is replaced by the server-side key.
+ * leak to a service that has no use for it. Hop-by-hop and forwarding headers
+ * are dropped as well. For a backend with an API key the caller's
+ * Authorization is replaced by the server-side key.
  */
 export function upstreamHeaders(incoming: Headers, backend: Backend): Headers {
   const headers = new Headers(incoming);
+  stripHopByHop(headers);
+  for (const name of FORWARDING) headers.delete(name);
   headers.set("host", new URL(backend.baseUrl).host);
   headers.delete("origin");
   headers.delete("referer");
@@ -143,6 +195,25 @@ export function upstreamHeaders(incoming: Headers, backend: Backend): Headers {
   if (backend.kind === "ollaya") {
     headers.delete("authorization");
     if (backend.apiKey) headers.set("authorization", `Bearer ${backend.apiKey}`);
+  }
+  return headers;
+}
+
+/**
+ * Headers for the response relayed back to the browser. A backend must not be
+ * able to set cookies on the manager's origin, hop-by-hop headers belong to
+ * the upstream connection, and no header may carry the backend's API key back
+ * (e.g. an endpoint that echoes request headers).
+ */
+export function downstreamHeaders(incoming: Headers, backend: Backend): Headers {
+  const headers = new Headers(incoming);
+  stripHopByHop(headers);
+  headers.delete("set-cookie");
+  if (backend.apiKey) {
+    const key = backend.apiKey;
+    for (const [name, value] of [...headers]) {
+      if (value.includes(key)) headers.delete(name);
+    }
   }
   return headers;
 }
@@ -175,4 +246,35 @@ export async function probeBackend(
   } catch {
     return { status: "unreachable", version: null };
   }
+}
+
+/**
+ * Probes every backend, sharing one in-flight probe and caching the result
+ * for `ttlMs`. /health and /api/backends both use it, so a burst of requests
+ * costs one probe per backend instead of one per request.
+ */
+export function createProbeAll(
+  backends: Backend[],
+  { ttlMs = 5_000, fetchFn = fetch as FetchFn } = {},
+): () => Promise<(BackendStatus & { id: string })[]> {
+  let cached: { at: number; value: (BackendStatus & { id: string })[] } | null = null;
+  let inflight: Promise<(BackendStatus & { id: string })[]> | null = null;
+  return () => {
+    if (cached && Date.now() - cached.at < ttlMs) return Promise.resolve(cached.value);
+    if (!inflight) {
+      inflight = Promise.all(backends.map((b) => probeBackend(b, fetchFn)))
+        .then((statuses) => {
+          const value = backends.map((b, i) => ({
+            id: b.id,
+            ...(statuses[i] ?? { status: "unreachable" as const, version: null }),
+          }));
+          cached = { at: Date.now(), value };
+          return value;
+        })
+        .finally(() => {
+          inflight = null;
+        });
+    }
+    return inflight;
+  };
 }

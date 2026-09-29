@@ -10,10 +10,19 @@ Ollama Manager is a lightweight web UI for managing an Ollama instance. It consi
 
 ### Backend (`src/`)
 
-- **`src/index.ts`** — main `Bun.serve()` entry point. Handles routing, the backend relay, registry scraping, LiteLLM sync, OpenAPI/Swagger, and security headers.
-- **`src/backends.ts`** — backend registry (Ollama always, Ollaya when `OLLAYA_HOST` is set), the `/api/backends/{id}/…` path mapping + per-kind allowlist, upstream header handling, and status probes.
-- **`src/auth.ts`** — stateless HMAC-signed session tokens, cookie parsing, and session helpers. Tokens are signed with a secret derived from `MASTER_KEY`; no in-memory session store is required, but revoked/logged-out tokens are remembered until expiry.
-- **`src/library.ts`** — HTML parsers for `ollama.com/library` and `ollama.com/search`, plus `parseLibraryDetailHtml()` for per-model tag tables.
+- **`src/index.ts`** — entry point only: loads the config, builds the app, calls `Bun.serve()` and starts the timers — and only when run directly (`import.meta.main`). Importing it has no side effects.
+- **`src/app.ts`** — `createApp(config, deps)`: the complete request handler as a **route table**. Each route declares `access: "public" | "session"`, so the auth gate is data, not statement order. Also static files, security headers and the legacy `/api/*` alias.
+- **`src/config.ts`** — `loadConfig(env)`: all environment variables, validated; invalid values fail at startup naming the variable.
+- **`src/backends.ts`** — backend registry (Ollama always, Ollaya when `OLLAYA_HOST` is set), host validation, the `/api/backends/{id}/…` path mapping + per-kind allowlist, request/response header hygiene, status probes (`createProbeAll()` with a 5 s TTL).
+- **`src/relay.ts`** — `forwardToBackend()`: one relayed request, with connect and streaming idle timeouts.
+- **`src/session.ts`** — `createSessions()`: request tokens, cookies, logout revocation (valid tokens only, capped) and the login rate limiter (capped).
+- **`src/auth.ts`** — stateless HMAC-signed session tokens and cookie parsing. Tokens are signed with a secret derived from `MASTER_KEY`.
+- **`src/catalogs.ts`** — ollama.com scrape (+ `/search` fallback, per-model details) and the ollaya.dev index, all through `src/cache.ts`.
+- **`src/cache.ts`** — `createTtlCache()`: TTL, single-flight loads, stale fallback, entry cap.
+- **`src/litellm.ts`** — `createLiteLLMSync()`: LiteLLM model sync, status and scheduler.
+- **`src/openapi.ts`** — the OpenAPI document and the Swagger UI shell.
+- **`src/http.ts`** — logging, JSON errors, size-limited body reads, the streaming idle-timeout wrapper, CSP/security headers.
+- **`src/library.ts`** — HTML parsers for `ollama.com/library` and `ollama.com/search`, `parseLibraryDetailHtml()`, and the ollaya.dev index parser.
 
 Key backend behaviors:
 
@@ -23,7 +32,11 @@ Key backend behaviors:
 - **Upstream headers**: `origin`, `referer`, `cookie` and `x-session-token` are stripped before every upstream request; for Ollaya the caller's `authorization` is replaced by `OLLAYA_API_KEY`.
 - **Ollaya catalog** (`/api/catalog/ollaya`): reads ollaya.dev's static `/search.json` index, cached for 1 hour; a failed refresh serves the previous list marked `stale`.
 - **Registry catalog** (`/api/catalog/library`): scrapes `ollama.com/library`, falls back to HTMX-paginated `/search` if the markup changes, and caches results in memory for 1 hour. Per-model details are cached for 6 hours.
-- **Authentication**: optional master-key auth. If `MASTER_KEY` is set, API routes (not static files or public endpoints) require a valid session token provided either as an httpOnly `om_session` cookie or an `x-session-token` header. Public endpoints (`/api/session`, `/api/auth`, `/api/logout`, `/api/app-version`, `/api/openapi.json`, `/api/docs`, `/health`) are checked *before* the auth gate.
+- **Authentication**: optional master-key auth. If `MASTER_KEY` is set, API routes (not static files or public endpoints) require a valid session token provided either as an httpOnly `om_session` cookie or an `x-session-token` header. Public routes (`/api/session`, `/api/auth`, `/api/logout`, `/api/app-version`, `/api/openapi.json`, `/api/docs`, `/health`) are marked `access: "public"` in the route table of `src/app.ts`; everything else is gated. Wrong methods on known routes get `405` with `Allow`.
+- **Login hardening**: `/api/auth` checks the rate limit before reading the body, reads at most 4 KB, and counts every failed attempt (wrong key, non-string key, bad JSON, oversized body). `/api/logout` only revokes tokens that verify.
+- **`/health`**: public and always 200; versions and the backend list only with a session (or without `MASTER_KEY`).
+- **Timeouts**: `Bun.serve` keeps `idleTimeout: 60`; routes marked `slow` (backend relay, legacy alias, LiteLLM sync) call `server.timeout(req, 0)` because a model cold start can take longer than that before the first byte.
+- **Dot segments**: Bun resolves `.`/`..` in `req.url` before the handler runs, so `/api/backends/x/../../tags` is routed (and gated) as `/api/tags`.
 - **LiteLLM sync**: optional background sync of local Ollama models to a LiteLLM proxy via `LITELLM_URL` + `LITELLM_KEY`.
 - **Security headers**: CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` are applied to every response. `/api/docs` gets a looser CSP for Swagger UI's external scripts.
 
@@ -105,9 +118,10 @@ bun test
 - **Lint before commit**: always run `bun run lint` after making changes. Do not commit unlinted code.
 - **Frontend build required**: browsers cannot run the authored `public/src/**/*.ts` files directly. Any change to frontend code must be reflected in `dist/public/` via `bun run build:web` before runtime or Docker build.
 - **Two tsconfigs**: `tsconfig.json` covers `src/`; `public/tsconfig.json` covers `public/src/`. Keep them separate so DOM globals and server globals do not collide.
-- **In-memory caching only**: the backend has no database. Session revocation, catalog cache, catalog detail cache, and LiteLLM sync state live in process memory.
-- **Auth gate ordering**: static files and public endpoints are checked *before* the `MASTER_KEY` auth gate. Do not accidentally move the auth check above public routes.
-- **Upstream header stripping**: `upstreamHeaders()` (used by `forwardToBackend()`) deletes `origin`, `referer`, `cookie` and `x-session-token` from outgoing headers. This is required for the backends' origin validation and to avoid leaking the manager's session upstream.
+- **In-memory caching only**: the backend has no database. Session revocation, catalog caches and LiteLLM sync state live in process memory — every map that unauthenticated input can grow has an upper bound, keep it that way.
+- **No side effects on import**: only `src/index.ts` may start servers or timers, and only under `import.meta.main`. Tests build apps with `createApp(config, { fetchFn })`.
+- **Auth gate as data**: a new API route must be added to the route table in `src/app.ts` with an explicit `access`. Only mark it `"public"` if it must work without a session.
+- **Upstream header stripping**: `upstreamHeaders()` (used by `forwardToBackend()`) deletes `origin`, `referer`, `cookie`, `x-session-token`, hop-by-hop headers (incl. names listed in `Connection`) and the `x-forwarded-*` family. `downstreamHeaders()` drops `Set-Cookie`, hop-by-hop headers and any header echoing the backend's API key.
 - **Backend allowlist**: new Ollaya endpoints must be added to the allowlist in `src/backends.ts` explicitly; never relay arbitrary paths to Ollaya.
 - **No inline scripts/handlers**: the frontend CSP relies on external ES modules. Avoid inline `<script>` tags and inline `onclick`/`onchange` attributes in `public/index.html` or dynamically generated markup; wire events via `addEventListener` in page modules.
 
@@ -115,11 +129,20 @@ bun test
 
 ```
 src/
-  index.ts          # Bun server — routing, proxy, scraper, sync, OpenAPI
+  index.ts          # Entry point (Bun.serve under import.meta.main)
+  app.ts            # createApp(): route table, auth gate, static files
+  config.ts         # Environment → validated Config
+  backends.ts       # Backend registry, path mapping, header hygiene, probes
+  relay.ts          # forwardToBackend()
+  session.ts        # Sessions, revocation, login rate limit
   auth.ts           # Stateless HMAC-signed session tokens + cookies
-  backends.ts       # Backend registry, path mapping, upstream headers
-  library.ts        # ollama.com library/search/detail parsers
-  *.test.ts         # Backend unit tests
+  catalogs.ts       # ollama.com + ollaya.dev catalogs
+  cache.ts          # TTL cache with single-flight + stale fallback
+  litellm.ts        # LiteLLM sync
+  openapi.ts        # OpenAPI spec + Swagger shell
+  http.ts           # Logging, errors, idle timeout, security headers
+  library.ts        # ollama.com library/search/detail + ollaya.dev parsers
+  *.test.ts         # Unit and in-process tests; server.test.ts runs the real process
 public/
   index.html        # SPA shell (imports bundled TS/CSS sources)
   src/              # Frontend source modules
