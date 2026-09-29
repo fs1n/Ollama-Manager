@@ -18,11 +18,11 @@
     "test:coverage": "bun test --coverage"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.15",
+    "@biomejs/biome": "^2.5.14",
     "@happy-dom/global-registrator": "^20.14.5",
-    "@types/bun": "^1.4.0",
+    "@types/bun": "^1.4.2",
     "happy-dom": "^20.14.5",
-    "typescript": "5"
+    "typescript": "7"
   },
   "dependencies": {
     "node-html-parser": "^9.0.1"
