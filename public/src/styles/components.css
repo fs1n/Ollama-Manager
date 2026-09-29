@@ -124,6 +124,23 @@ textarea {
   min-height: 80px;
 }
 
+/* Monospace output panel: pull progress, LiteLLM sync log, generate output,
+   embedding vectors. One rule so these can't drift apart again. */
+.pull-log,
+.embed-result {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  max-height: 200px;
+  overflow-y: auto;
+  word-break: break-all;
+  line-height: 1.7;
+}
+
 .form-row {
   display: grid;
   gap: 12px;
@@ -131,9 +148,6 @@ textarea {
 }
 .form-row.cols2 {
   grid-template-columns: 1fr 1fr;
-}
-.form-row.cols3 {
-  grid-template-columns: 1fr 1fr 1fr;
 }
 
 label {

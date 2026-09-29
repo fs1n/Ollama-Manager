@@ -14,7 +14,37 @@ services:
       # - LITELLM_URL=http://litellm:4000
       # - LITELLM_KEY=your-secret-key-here
       # - LITELLM_SYNC_INTERVAL=30   # minutes, 0 = disable auto-sync
+      #
+      # Optional: Ollaya (decision models) next to Ollama. Either start the
+      # bundled service below (`docker compose --profile ollaya up`), or point
+      # at an Ollaya running on the host — it binds 127.0.0.1 by default, so
+      # start it with OLLAYA_HOST=0.0.0.0 and an OLLAYA_API_KEY there.
+      # - OLLAYA_HOST=http://ollaya:11435          # bundled service
+      # - OLLAYA_HOST=http://host.docker.internal:11435  # Ollaya on the host
+      # - OLLAYA_API_KEY=${OLLAYA_API_KEY}
+      # Optional: let LiteLLM reach Ollaya through the manager's restricted
+      # TypeSafe gateway (see README, "Ollaya through LiteLLM").
+      # - OLLAYA_TYPESAFE_KEY=${OLLAYA_TYPESAFE_KEY}
     extra_hosts:
       # host.docker.internal only resolves out of the box on Docker Desktop
       # (macOS/Windows). This makes it resolve on native Linux Docker too.
       - "host.docker.internal:host-gateway"
+
+  # Ollaya — only started with `docker compose --profile ollaya up`.
+  # CPU image; use ghcr.io/ollaya-dev/ollaya:cuda (or :cuda12 for drivers
+  # older than R580) with `gpus: all` on an NVIDIA host.
+  ollaya:
+    profiles: ["ollaya"]
+    image: ghcr.io/ollaya-dev/ollaya
+    environment:
+      # Listens on all interfaces inside the container, but no port is
+      # published: only containers on this compose network reach it. Set
+      # OLLAYA_API_KEY in .env (and on the manager) to require a key anyway.
+      - OLLAYA_HOST=0.0.0.0
+      - OLLAYA_API_KEY=${OLLAYA_API_KEY:-}
+    volumes:
+      - ollaya-models:/home/ollaya/.ollaya/models
+    restart: unless-stopped
+
+volumes:
+  ollaya-models:

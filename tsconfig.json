@@ -1,5 +1,8 @@
 {
-  "include": ["src/**/*.ts"],
+  "include": [
+    "src/**/*.ts",
+    "scripts/**/*.ts"
+  ],
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",
@@ -9,6 +12,15 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["bun-types"]
+    "types": [
+      "bun-types"
+    ],
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true
   }
 }

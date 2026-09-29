@@ -24,7 +24,7 @@
     </div>
     <div class="login-subtitle">Enter master key to continue</div>
     <input type="password" id="login-key" placeholder="Master key" autocomplete="off" class="login-input">
-    <button class="btn btn-primary login-btn" id="login-btn">
+    <button type="button" class="btn btn-primary login-btn" id="login-btn">
       <i class="ti ti-lock" aria-hidden="true"></i> Unlock
     </button>
     <div id="login-error" class="login-error"></div>
@@ -41,7 +41,7 @@
     <span id="status-text">disconnected</span>
   </div>
   <span class="version-badge" id="version-badge"></span>
-  <button class="btn btn-sm" id="logout-btn" style="display:none;margin-left:auto">
+  <button type="button" class="btn btn-sm" id="logout-btn" style="display:none;margin-left:auto">
     <i class="ti ti-logout" aria-hidden="true"></i> Logout
   </button>
 </header>
@@ -72,19 +72,22 @@
     </div>
 
     <div class="nav-section">Test</div>
-    <div class="nav-item" data-page="chat" tabindex="0" role="button">
+    <div class="nav-item" data-page="chat" data-requires="chat" tabindex="0" role="button">
       <i class="ti ti-messages" aria-hidden="true"></i> Chat
     </div>
-    <div class="nav-item" data-page="generate" tabindex="0" role="button">
+    <div class="nav-item" data-page="generate" data-requires="generate" tabindex="0" role="button">
       <i class="ti ti-wand" aria-hidden="true"></i> Generate
     </div>
-    <div class="nav-item" data-page="embeddings" tabindex="0" role="button">
+    <div class="nav-item" data-page="embeddings" data-requires="embed" tabindex="0" role="button">
       <i class="ti ti-vector" aria-hidden="true"></i> Embeddings
+    </div>
+    <div class="nav-item" data-page="decide" data-requires="decide" tabindex="0" role="button" style="display:none">
+      <i class="ti ti-arrows-split" aria-hidden="true"></i> Decide
     </div>
 
     <div class="nav-section">Integrations</div>
     <div class="nav-item" data-page="litellm" tabindex="0" role="button">
-      <i class="ti ti-refresh" aria-hidden="true"></i> LiteLLM Sync
+      <i class="ti ti-refresh" aria-hidden="true"></i> LiteLLM
     </div>
   </div>
 
@@ -102,13 +105,10 @@
       <div class="page-title">Dashboard</div>
       <div class="page-sub">Server overview and status</div>
     </div>
-    <button class="btn" id="dash-refresh-btn"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
+    <button type="button" class="btn" id="dash-refresh-btn"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
   </div>
+  <div class="backend-cards" id="dash-backends"></div>
   <div class="info-grid" id="dash-info">
-    <div class="info-item">
-      <div class="info-label">Server version</div>
-      <div class="info-value" id="dash-version">—</div>
-    </div>
     <div class="info-item">
       <div class="info-label">Local models</div>
       <div class="info-value" id="dash-model-count">—</div>
@@ -137,7 +137,7 @@
       <div class="page-title">Local models</div>
       <div class="page-sub">All models available on this server</div>
     </div>
-    <button class="btn" id="models-refresh-btn"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
+    <button type="button" class="btn" id="models-refresh-btn"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
   </div>
   <div id="model-grid-wrap"><div class="empty"><i class="ti ti-box" aria-hidden="true"></i>No models found</div></div>
 </div>
@@ -149,7 +149,7 @@
       <div class="page-title">Running models</div>
       <div class="page-sub">Models currently loaded in memory</div>
     </div>
-    <button class="btn" id="running-refresh-btn"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
+    <button type="button" class="btn" id="running-refresh-btn"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
   </div>
   <div id="running-wrap"><div class="empty"><i class="ti ti-player-pause" aria-hidden="true"></i>No models running</div></div>
 </div>
@@ -159,17 +159,23 @@
   <div class="page-header">
     <div>
       <div class="page-title">Pull model</div>
-      <div class="page-sub">Download a model from the Ollama registry</div>
+      <div class="page-sub" id="pull-sub">Download a model from the Ollama registry</div>
     </div>
   </div>
   <div class="card">
     <div class="form-row cols2">
-      <div>
-        <label for="pull-model">Model name</label>
-        <input type="text" id="pull-model" placeholder="llama3.2, mistral, gemma2:9b …">
+      <div class="pull-target">
+        <div id="pull-backend-wrap" style="display:none">
+          <label for="pull-backend">Backend</label>
+          <select id="pull-backend"></select>
+        </div>
+        <div>
+          <label for="pull-model">Model name</label>
+          <input type="text" id="pull-model" placeholder="llama3.2, mistral, gemma2:9b …">
+        </div>
       </div>
       <div style="display:flex;align-items:flex-end">
-        <button class="btn btn-primary" id="pull-btn" style="width:100%">
+        <button type="button" class="btn btn-primary" id="pull-btn" style="width:100%">
           <i class="ti ti-download" aria-hidden="true"></i> Pull
         </button>
       </div>
@@ -191,6 +197,12 @@
   </div>
   <div class="card">
     <div class="card-header"><div class="card-title"><i class="ti ti-copy" aria-hidden="true"></i> Copy model</div></div>
+    <div class="form-row" id="copy-backend-wrap" style="display:none">
+      <div>
+        <label for="copy-backend">Backend</label>
+        <select id="copy-backend"></select>
+      </div>
+    </div>
     <div class="form-row cols2">
       <div>
         <label for="copy-src">Source model</label>
@@ -201,18 +213,18 @@
         <input type="text" id="copy-dst" placeholder="my-llama3.2">
       </div>
     </div>
-    <button class="btn btn-primary" id="copy-btn"><i class="ti ti-copy" aria-hidden="true"></i> Copy</button>
+    <button type="button" class="btn btn-primary" id="copy-btn"><i class="ti ti-copy" aria-hidden="true"></i> Copy</button>
   </div>
 
   <div class="card">
-    <div class="card-header"><div class="card-title"><i class="ti ti-upload" aria-hidden="true"></i> Push model</div></div>
+    <div class="card-header"><div class="card-title"><i class="ti ti-upload" aria-hidden="true"></i> Push model <span class="badge" id="push-backend-note" style="display:none">Ollama only</span></div></div>
     <div class="form-row">
       <div>
         <label for="push-model">Model name (must be in namespace/model format)</label>
         <input type="text" id="push-model" placeholder="namespace/mymodel">
       </div>
     </div>
-    <button class="btn" id="push-btn"><i class="ti ti-upload" aria-hidden="true"></i> Push</button>
+    <button type="button" class="btn" id="push-btn"><i class="ti ti-upload" aria-hidden="true"></i> Push</button>
   </div>
 </div>
 
@@ -235,7 +247,7 @@
         <textarea id="chat-system" rows="1" placeholder="You are a helpful assistant." style="min-height:36px;resize:vertical"></textarea>
       </div>
       <div style="display:flex;align-items:flex-end">
-        <button class="btn btn-sm" id="chat-clear-btn"><i class="ti ti-trash" aria-hidden="true"></i> Clear</button>
+        <button type="button" class="btn btn-sm" id="chat-clear-btn"><i class="ti ti-trash" aria-hidden="true"></i> Clear</button>
       </div>
     </div>
     <div class="chat-messages" id="chat-messages">
@@ -244,7 +256,7 @@
     <label for="chat-input" style="position:absolute;left:-9999px">Message</label>
     <div class="chat-input-row">
       <textarea id="chat-input" placeholder="Type a message… (Enter to send, Shift+Enter for newline)" rows="2"></textarea>
-      <button class="btn btn-primary" id="chat-send-btn" style="min-width:80px">
+      <button type="button" class="btn btn-primary" id="chat-send-btn" style="min-width:80px">
         <i class="ti ti-send" aria-hidden="true"></i> Send
       </button>
     </div>
@@ -282,8 +294,8 @@
       <textarea id="gen-prompt" rows="4" placeholder="Enter your prompt…"></textarea>
     </div>
     <div style="display:flex;gap:10px;margin-bottom:16px">
-      <button class="btn btn-primary" id="gen-btn"><i class="ti ti-wand" aria-hidden="true"></i> Generate</button>
-      <button class="btn btn-sm" id="gen-output-clear-btn">Clear</button>
+      <button type="button" class="btn btn-primary" id="gen-btn"><i class="ti ti-wand" aria-hidden="true"></i> Generate</button>
+      <button type="button" class="btn btn-sm" id="gen-output-clear-btn">Clear</button>
     </div>
     <label>Response</label>
     <div class="embed-result" id="gen-output" style="min-height:100px"></div>
@@ -316,7 +328,7 @@
       <label for="embed-input">Input text (one per line = multiple embeddings)</label>
       <textarea id="embed-input" rows="4" placeholder="The quick brown fox…&#10;Another sentence for comparison…"></textarea>
     </div>
-    <button class="btn btn-primary" id="embed-btn"><i class="ti ti-vector" aria-hidden="true"></i> Embed</button>
+    <button type="button" class="btn btn-primary" id="embed-btn"><i class="ti ti-vector" aria-hidden="true"></i> Embed</button>
     <div id="embed-stats" style="margin-top:16px;display:none">
       <div class="info-grid" style="margin-bottom:12px">
         <div class="info-item">
@@ -338,17 +350,108 @@
   </div>
 </div>
 
+<!-- DECIDE -->
+<div class="page" id="page-decide">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Decide</div>
+      <div class="page-sub">Ask a decision model typed questions about a state — calibrated answers, no text generation</div>
+    </div>
+    <select id="decide-preset" aria-label="Load an example" style="width:200px">
+      <option value="">Load an example…</option>
+    </select>
+  </div>
+
+  <div class="card">
+    <div class="form-row cols2">
+      <div>
+        <label for="decide-model">Model</label>
+        <select id="decide-model"></select>
+      </div>
+      <div>
+        <label for="decide-keep-alive">Keep loaded after the answer</label>
+        <select id="decide-keep-alive">
+          <option value="">Server default (5 minutes)</option>
+          <option value="30m">30 minutes</option>
+          <option value="-1">Until unloaded</option>
+          <option value="0">Unload right away</option>
+        </select>
+      </div>
+    </div>
+    <div class="decide-hint" id="decide-model-info"></div>
+    <label for="decide-state">State</label>
+    <textarea id="decide-state" rows="5" placeholder="A message, an email, a ticket — or JSON"></textarea>
+    <div class="decide-hint">Plain text, or JSON: objects and arrays are sent as JSON.</div>
+    <div class="decide-image">
+      <label for="decide-image">Image <span class="decide-hint">(vision models only, one PNG)</span></label>
+      <input type="file" id="decide-image" accept="image/png">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Questions</div>
+      <div class="decide-modes" id="decide-modes">
+        <button type="button" class="btn btn-sm decide-mode active" data-mode="form">Editor</button>
+        <button type="button" class="btn btn-sm decide-mode" data-mode="json">JSON</button>
+      </div>
+    </div>
+    <div id="decide-builtin" class="decide-builtin" style="display:none"></div>
+    <div id="decide-questions"></div>
+    <textarea id="decide-questions-json" rows="14" spellcheck="false" style="display:none" aria-label="Questions as JSON"></textarea>
+    <div class="decide-add" id="decide-add">
+      <button type="button" class="btn btn-sm" data-add="choice"><i class="ti ti-plus" aria-hidden="true"></i> Choice</button>
+      <button type="button" class="btn btn-sm" data-add="score"><i class="ti ti-plus" aria-hidden="true"></i> Score</button>
+      <button type="button" class="btn btn-sm" data-add="noul"><i class="ti ti-plus" aria-hidden="true"></i> Yes / no</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="decide-run">
+      <label class="decide-check"><input type="checkbox" id="decide-extras"> Include laya details (entropy confidence, act probability)</label>
+      <button type="button" class="btn btn-primary" id="decide-btn"><i class="ti ti-arrows-split" aria-hidden="true"></i> Decide</button>
+    </div>
+    <div id="decide-errors"></div>
+  </div>
+
+  <div class="card" id="decide-result-card" style="display:none">
+    <div class="card-header">
+      <div class="card-title"><i class="ti ti-chart-bar" aria-hidden="true"></i> Answers</div>
+    </div>
+    <div id="decide-result"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><i class="ti ti-device-floppy" aria-hidden="true"></i> Save as model</div>
+    </div>
+    <div class="decide-hint" style="margin-bottom:12px">Bakes the current questions into a new model on the same backend, so it can be called without sending them (Ollaya <code>/api/create</code>).</div>
+    <div class="form-row cols2">
+      <div>
+        <label for="decide-save-name">New model name</label>
+        <input type="text" id="decide-save-name" placeholder="triage">
+      </div>
+      <div>
+        <label for="decide-save-desc">Description (optional)</label>
+        <input type="text" id="decide-save-desc" placeholder="Support ticket triage">
+      </div>
+    </div>
+    <button type="button" class="btn" id="decide-save-btn"><i class="ti ti-device-floppy" aria-hidden="true"></i> Create model</button>
+    <div id="decide-save-log" class="pull-log" style="display:none;margin-top:12px"></div>
+  </div>
+</div>
+
 <!-- CATALOG -->
 <div class="page" id="page-catalog">
   <div class="page-header">
     <div>
       <div class="page-title">Registry catalog</div>
-      <div class="page-sub">All models available on ollama.com — click to pull</div>
+      <div class="page-sub" id="catalog-sub">All models available on ollama.com — click to pull</div>
     </div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <div class="search-wrap">
         <input type="text" id="catalog-search" placeholder="Search models…" aria-label="Search models" style="width:220px">
-        <button class="search-clear" id="catalog-search-clear" aria-label="Clear search"><i class="ti ti-x" aria-hidden="true"></i></button>
+        <button type="button" class="search-clear" id="catalog-search-clear" aria-label="Clear search"><i class="ti ti-x" aria-hidden="true"></i></button>
       </div>
       <select id="catalog-size" style="width:145px">
         <option value="any">Any size</option>
@@ -362,22 +465,26 @@
         <option value="popular">Most pulled</option>
         <option value="newest">Recently updated</option>
       </select>
-      <button class="btn" id="catalog-refresh-btn"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
+      <button type="button" class="btn" id="catalog-refresh-btn"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
     </div>
   </div>
+  <div class="catalog-sources" id="catalog-source-toggle" style="display:none">
+    <button type="button" class="btn btn-sm cat-source active" data-source="ollama"><i class="ti ti-world" aria-hidden="true"></i> ollama.com</button>
+    <button type="button" class="btn btn-sm cat-source" data-source="ollaya"><i class="ti ti-arrows-split" aria-hidden="true"></i> ollaya.dev</button>
+  </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px" id="catalog-cap-filters">
-    <button class="btn btn-sm cat-cap active" data-cap="all">All</button>
-    <button class="btn btn-sm cat-cap" data-cap="cloud"><i class="ti ti-cloud" aria-hidden="true"></i> Cloud</button>
-    <button class="btn btn-sm cat-cap" data-cap="embedding"><i class="ti ti-vector" aria-hidden="true"></i> Embedding</button>
-    <button class="btn btn-sm cat-cap" data-cap="vision"><i class="ti ti-eye" aria-hidden="true"></i> Vision</button>
-    <button class="btn btn-sm cat-cap" data-cap="tools"><i class="ti ti-tool" aria-hidden="true"></i> Tools</button>
-    <button class="btn btn-sm cat-cap" data-cap="thinking"><i class="ti ti-brain" aria-hidden="true"></i> Thinking</button>
+    <button type="button" class="btn btn-sm cat-cap active" data-cap="all">All</button>
+    <button type="button" class="btn btn-sm cat-cap" data-cap="cloud"><i class="ti ti-cloud" aria-hidden="true"></i> Cloud</button>
+    <button type="button" class="btn btn-sm cat-cap" data-cap="embedding"><i class="ti ti-vector" aria-hidden="true"></i> Embedding</button>
+    <button type="button" class="btn btn-sm cat-cap" data-cap="vision"><i class="ti ti-eye" aria-hidden="true"></i> Vision</button>
+    <button type="button" class="btn btn-sm cat-cap" data-cap="tools"><i class="ti ti-tool" aria-hidden="true"></i> Tools</button>
+    <button type="button" class="btn btn-sm cat-cap" data-cap="thinking"><i class="ti ti-brain" aria-hidden="true"></i> Thinking</button>
     <span style="margin-left:auto;font-size:12px;color:var(--text3);align-self:center" id="catalog-count"></span>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px" id="catalog-view-toggle">
-    <button class="btn btn-sm cat-view active" data-view="all">All models</button>
-    <button class="btn btn-sm cat-view" data-view="installed"><i class="ti ti-check" aria-hidden="true"></i> Installed</button>
-    <button class="btn btn-sm cat-view" data-view="running"><i class="ti ti-player-play" aria-hidden="true"></i> Running</button>
+    <button type="button" class="btn btn-sm cat-view active" data-view="all">All models</button>
+    <button type="button" class="btn btn-sm cat-view" data-view="installed"><i class="ti ti-check" aria-hidden="true"></i> Installed</button>
+    <button type="button" class="btn btn-sm cat-view" data-view="running"><i class="ti ti-player-play" aria-hidden="true"></i> Running</button>
   </div>
   <div id="catalog-wrap"><div class="empty"><i class="ti ti-world" aria-hidden="true"></i>Click refresh to load catalog</div></div>
 </div>
@@ -386,8 +493,8 @@
 <div class="page" id="page-litellm">
   <div class="page-header">
     <div>
-      <div class="page-title">LiteLLM Sync</div>
-      <div class="page-sub">Register Ollama models with your LiteLLM proxy</div>
+      <div class="page-title">LiteLLM</div>
+      <div class="page-sub">Register Ollama models with your LiteLLM proxy, and reach Ollaya's decision models through it</div>
     </div>
   </div>
   <div class="card">
@@ -401,10 +508,17 @@
       <div class="card-title"><i class="ti ti-play" aria-hidden="true"></i> Manual Sync</div>
     </div>
     <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px">
-      <button class="btn btn-primary" id="litellm-sync-btn">
+      <button type="button" class="btn btn-primary" id="litellm-sync-btn">
         <i class="ti ti-refresh" aria-hidden="true"></i> Sync Now
       </button>
     </div>
+  </div>
+  <div class="card" id="litellm-ollaya-card" style="display:none">
+    <div class="card-header">
+      <div class="card-title"><i class="ti ti-arrows-split" aria-hidden="true"></i> Ollaya through LiteLLM</div>
+      <button type="button" class="btn btn-sm" id="litellm-ollaya-refresh"><i class="ti ti-refresh" aria-hidden="true"></i> Check again</button>
+    </div>
+    <div id="litellm-ollaya"><div class="empty"><span class="spinner"></span> Checking…</div></div>
   </div>
 </div>
 
@@ -415,7 +529,7 @@
   <div class="modal">
     <div class="modal-title">
       <span id="modal-title-text">Model details</span>
-      <button class="btn btn-sm" id="modal-close-btn" aria-label="Close dialog">
+      <button type="button" class="btn btn-sm" id="modal-close-btn" aria-label="Close dialog">
         <i class="ti ti-x" aria-hidden="true"></i>
       </button>
     </div>
@@ -431,8 +545,8 @@
     </div>
     <p id="confirm-message" style="font-size:13px;color:var(--text2);margin-bottom:20px;line-height:1.6"></p>
     <div style="display:flex;gap:10px;justify-content:flex-end">
-      <button class="btn" id="confirm-cancel-btn">Cancel</button>
-      <button class="btn btn-danger" id="confirm-ok-btn">Delete</button>
+      <button type="button" class="btn" id="confirm-cancel-btn">Cancel</button>
+      <button type="button" class="btn btn-danger" id="confirm-ok-btn">Delete</button>
     </div>
   </div>
 </div>

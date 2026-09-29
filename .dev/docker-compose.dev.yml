@@ -15,11 +15,17 @@ services:
       LITELLM_URL: "http://litellm:4000"
       LITELLM_KEY: "${LITELLM_MASTER_KEY:-sk-litellm-dev}"
       LITELLM_SYNC_INTERVAL: "30"
+      # Ollaya next to Ollama, and the TypeSafe gateway LiteLLM uses to reach it
+      OLLAYA_HOST: "http://ollaya:11435"
+      OLLAYA_API_KEY: "${OLLAYA_API_KEY:-ollaya-dev}"
+      OLLAYA_TYPESAFE_KEY: "${OLLAYA_TYPESAFE_KEY:-typesafe-dev}"
     env_file:
       - .env
     depends_on:
       litellm:
         condition: service_healthy
+      ollaya:
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "bun -e \"process.exit((await fetch('http://localhost:3000/health')).ok ? 0 : 1)\""]
       interval: 15s
@@ -40,6 +46,11 @@ services:
       STORE_MODEL_IN_DB: "True"
       LITELLM_MASTER_KEY: "${LITELLM_MASTER_KEY:-sk-litellm-dev}"
       OLLAMA_API_BASE: "http://host.docker.internal:11434"
+      # Decision models through the manager's restricted gateway — never point
+      # TYPESAFE_API_BASE at Ollaya directly: LiteLLM forwards every /typesafe/*
+      # path, including Ollaya's management API.
+      TYPESAFE_API_BASE: "http://ollama-manager:3000/api/typesafe"
+      TYPESAFE_API_KEY: "${OLLAYA_TYPESAFE_KEY:-typesafe-dev}"
     env_file:
       - .env
     volumes:
@@ -58,6 +69,20 @@ services:
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+  ollaya:
+    image: ghcr.io/ollaya-dev/ollaya
+    container_name: ollaya-dev
+    environment:
+      OLLAYA_HOST: "0.0.0.0"
+      OLLAYA_API_KEY: "${OLLAYA_API_KEY:-ollaya-dev}"
+    ports:
+      # Published for poking at it from the host; the manager uses the
+      # compose network. Remove if the host network isn't trusted.
+      - "11435:11435"
+    volumes:
+      - ollaya_models:/home/ollaya/.ollaya/models
+    restart: unless-stopped
 
   db:
     image: postgres:16
@@ -80,3 +105,5 @@ services:
 volumes:
   postgres_data:
     name: litellm_postgres_data
+  ollaya_models:
+    name: ollaya_dev_models

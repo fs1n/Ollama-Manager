@@ -59,7 +59,7 @@ export function renderMarkdown(rawText: string): string {
   text = text.replace(/\*([^*]+)\*/g, "<em>$1</em>");
 
   // Restore code blocks
-  text = text.replace(/<!--CB:(\d+)-->/g, (_full, i) => codeBlocks[Number.parseInt(i, 10)]);
+  text = text.replace(/<!--CB:(\d+)-->/g, (_full, i) => codeBlocks[Number.parseInt(i, 10)] ?? "");
 
   // Line breaks — last so we don't break other replacements
   text = text.replace(/\n/g, "<br>");

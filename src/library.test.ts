@@ -6,6 +6,7 @@ import {
   hasNextSearchPage,
   parseLibraryDetailHtml,
   parseLibraryHtml,
+  parseOllayaSearchIndex,
   parseUpdatedTitle,
 } from "./library";
 
@@ -96,11 +97,12 @@ describe("hasNextSearchPage", () => {
 
 describe("dedupeByName", () => {
   test("keeps first occurrence per name", () => {
-    const base = parseLibraryHtml(fixture("library-llama3.1.html"))[0];
+    const [base] = parseLibraryHtml(fixture("library-llama3.1.html"));
+    if (!base) throw new Error("fixture parsed to no models");
     const dupe = { ...base, description: "shorter" };
     const out = dedupeByName([base, dupe]);
     expect(out.length).toBe(1);
-    expect(out[0].description).toBe(base.description);
+    expect(out[0]?.description).toBe(base.description);
   });
 });
 
@@ -124,14 +126,112 @@ describe("parseLibraryDetailHtml — /library/<name> tag table", () => {
   });
 
   test("each tag carries size, context and input type", () => {
-    const latest = detail.tags[0];
-    expect(latest.size).toBe("4.9GB");
-    expect(latest.context).toBe("128K");
-    expect(latest.input).toBe("Text");
+    expect(detail.tags[0]).toMatchObject({ size: "4.9GB", context: "128K", input: "Text" });
   });
 
   test("extracts page-level downloads and updated timestamp", () => {
     expect(detail.pulls).toBe("118.7M");
     expect(detail.updatedAt).toBe("2024-11-30T22:34:00.000Z");
+  });
+});
+
+describe("parseOllayaSearchIndex — ollaya.dev /search.json", () => {
+  const models = parseOllayaSearchIndex(JSON.parse(fixture("ollaya-search.json")));
+
+  test("reads models in editorial order with their tags", () => {
+    expect(models.map((m) => m.name)).toEqual(["winnow", "laya"]);
+    const laya = models[1];
+    expect(laya?.rank).toBe(2);
+    expect(laya?.updated).toBe("2026-09-23");
+    expect(laya?.capabilities).toContain("router");
+    expect(laya?.description).toStartWith("Open decision models");
+    expect(laya?.tags[0]).toEqual({
+      name: "laya:en",
+      summary: "English. Best for guardrails and email triage.",
+    });
+  });
+
+  test("drops the site-only fields", () => {
+    expect(Object.keys(models[0] ?? {}).sort()).toEqual(
+      ["capabilities", "description", "name", "rank", "tags", "updated"].sort(),
+    );
+  });
+
+  test("tolerates missing and malformed fields", () => {
+    const parsed = parseOllayaSearchIndex({
+      models: [
+        { name: "zeta" },
+        null,
+        { description: "no name" },
+        {
+          name: "alpha",
+          caps: ["x", 1],
+          rank: "3",
+          tags: [{ name: "alpha:1" }, { summary: "?" }, 5],
+        },
+        { name: "first", rank: 1 },
+        { name: "first", rank: 9 },
+      ],
+    });
+    expect(parsed).toEqual([
+      { name: "first", description: "", capabilities: [], rank: 1, updated: null, tags: [] },
+      {
+        name: "alpha",
+        description: "",
+        capabilities: ["x"],
+        rank: null,
+        updated: null,
+        tags: [{ name: "alpha:1", summary: "" }],
+      },
+      { name: "zeta", description: "", capabilities: [], rank: null, updated: null, tags: [] },
+    ]);
+  });
+
+  test("throws when the index has no models array", () => {
+    expect(() => parseOllayaSearchIndex({})).toThrow(/models array/);
+    expect(() => parseOllayaSearchIndex(null)).toThrow(/models array/);
+  });
+});
+
+describe("parseLibraryHtml — size badges beyond plain billions (library-sample.html)", () => {
+  const models = parseLibraryHtml(fixture("library-sample.html"));
+  const byName = (n: string) => models.find((m) => m.name === n);
+
+  test("reads every card", () => {
+    expect(models.map((m) => m.name)).toEqual([
+      "alfred",
+      "llama3.2",
+      "gpt-oss",
+      "minimax-m2.7",
+      "mixtral",
+      "all-minilm",
+    ]);
+  });
+
+  test("mixture-of-experts sizes stay whole", () => {
+    expect(byName("mixtral")?.sizes).toEqual(["8x7b", "8x22b"]);
+  });
+
+  test("sub-billion sizes keep their unit", () => {
+    expect(byName("all-minilm")?.sizes).toEqual(["23m", "335m"]);
+    expect(byName("all-minilm")?.capabilities).toEqual(["embedding"]);
+  });
+
+  test("cloud-only models have no sizes but the cloud flag", () => {
+    expect(byName("minimax-m2.7")).toMatchObject({ sizes: [], isCloud: true });
+  });
+});
+
+describe("pull count labels", () => {
+  test("index cards and detail pages accept both Pulls and Downloads", () => {
+    const card = parseLibraryHtml(
+      fixture("library-llama3.1.html").replaceAll("Pulls", "Downloads"),
+    );
+    expect(card[0]?.pulls).not.toBe("");
+    const detail = parseLibraryDetailHtml(
+      fixture("library-llama3.1-detail.html").replaceAll("Downloads", "Pulls"),
+      "llama3.1",
+    );
+    expect(detail.pulls).not.toBe("");
   });
 });
