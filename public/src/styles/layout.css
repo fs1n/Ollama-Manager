@@ -221,3 +221,6 @@ main {
   color: var(--text2);
   margin-top: 2px;
 }
+.status-dot.partial {
+  background: var(--warning);
+}

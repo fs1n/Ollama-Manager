@@ -2,7 +2,16 @@ import { apiOk, readNdjsonLines } from "../api";
 import { renderMarkdown } from "../render/markdown";
 import { ensureModels, populateModelSelects } from "../state/models";
 import { toast } from "../ui/toast";
+import { backendPath, parseModelKey } from "../utils/backends";
 import { escHtml } from "../utils/format";
+
+// The model <select>s hold model keys ("backend/name"); resolve one to the
+// backend endpoint and the plain model name the backend expects.
+function resolveModel(selectId: string, path: string): { url: string; model: string } | null {
+  const parsed = parseModelKey((document.getElementById(selectId) as HTMLSelectElement).value);
+  if (!parsed) return null;
+  return { url: backendPath(parsed.backend, path), model: parsed.name };
+}
 
 const TYPING_INDICATOR_HTML =
   '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
@@ -35,8 +44,8 @@ async function sendChat(): Promise<void> {
   const input = document.getElementById("chat-input") as HTMLTextAreaElement;
   const text = input.value.trim();
   if (!text) return;
-  const model = (document.getElementById("chat-model") as HTMLSelectElement).value;
-  if (!model) {
+  const target = resolveModel("chat-model", "/chat");
+  if (!target) {
     toast("Select a model first", "error");
     return;
   }
@@ -76,9 +85,9 @@ async function sendChat(): Promise<void> {
   let full = "";
 
   try {
-    const r = await apiOk("/api/chat", {
+    const r = await apiOk(target.url, {
       method: "POST",
-      body: JSON.stringify({ model, messages: chatHistory, stream: true }),
+      body: JSON.stringify({ model: target.model, messages: chatHistory, stream: true }),
       signal: chatAbort.signal,
     });
 
@@ -141,9 +150,9 @@ async function doGenerate(): Promise<void> {
     return;
   }
 
-  const model = (document.getElementById("gen-model") as HTMLSelectElement).value;
+  const target = resolveModel("gen-model", "/generate");
   const prompt = (document.getElementById("gen-prompt") as HTMLTextAreaElement).value.trim();
-  if (!model || !prompt) {
+  if (!target || !prompt) {
     toast("Select a model and enter a prompt", "error");
     return;
   }
@@ -158,10 +167,10 @@ async function doGenerate(): Promise<void> {
   genBtn.classList.remove("btn-primary");
 
   try {
-    const body: Record<string, unknown> = { model, prompt, stream: true };
+    const body: Record<string, unknown> = { model: target.model, prompt, stream: true };
     if (system) body.system = system;
     if (format) body.format = format;
-    const r = await apiOk("/api/generate", {
+    const r = await apiOk(target.url, {
       method: "POST",
       body: JSON.stringify(body),
       signal: genAbort.signal,
@@ -180,9 +189,9 @@ async function doGenerate(): Promise<void> {
 }
 
 async function doEmbed(): Promise<void> {
-  const model = (document.getElementById("embed-model") as HTMLSelectElement).value;
+  const target = resolveModel("embed-model", "/embed");
   const raw = (document.getElementById("embed-input") as HTMLTextAreaElement).value.trim();
-  if (!model || !raw) {
+  if (!target || !raw) {
     toast("Select a model and enter text", "error");
     return;
   }
@@ -193,9 +202,9 @@ async function doEmbed(): Promise<void> {
   const truncate =
     (document.getElementById("embed-truncate") as HTMLSelectElement).value === "true";
   try {
-    const r = await apiOk("/api/embed", {
+    const r = await apiOk(target.url, {
       method: "POST",
-      body: JSON.stringify({ model, input, truncate }),
+      body: JSON.stringify({ model: target.model, input, truncate }),
     });
     const d = await r.json();
     const vecs: number[][] = d.embeddings || [];

@@ -104,11 +104,8 @@
     </div>
     <button class="btn" id="dash-refresh-btn"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
   </div>
+  <div class="backend-cards" id="dash-backends"></div>
   <div class="info-grid" id="dash-info">
-    <div class="info-item">
-      <div class="info-label">Server version</div>
-      <div class="info-value" id="dash-version">—</div>
-    </div>
     <div class="info-item">
       <div class="info-label">Local models</div>
       <div class="info-value" id="dash-model-count">—</div>
@@ -159,14 +156,20 @@
   <div class="page-header">
     <div>
       <div class="page-title">Pull model</div>
-      <div class="page-sub">Download a model from the Ollama registry</div>
+      <div class="page-sub" id="pull-sub">Download a model from the Ollama registry</div>
     </div>
   </div>
   <div class="card">
     <div class="form-row cols2">
-      <div>
-        <label for="pull-model">Model name</label>
-        <input type="text" id="pull-model" placeholder="llama3.2, mistral, gemma2:9b …">
+      <div class="pull-target">
+        <div id="pull-backend-wrap" style="display:none">
+          <label for="pull-backend">Backend</label>
+          <select id="pull-backend"></select>
+        </div>
+        <div>
+          <label for="pull-model">Model name</label>
+          <input type="text" id="pull-model" placeholder="llama3.2, mistral, gemma2:9b …">
+        </div>
       </div>
       <div style="display:flex;align-items:flex-end">
         <button class="btn btn-primary" id="pull-btn" style="width:100%">
@@ -191,6 +194,12 @@
   </div>
   <div class="card">
     <div class="card-header"><div class="card-title"><i class="ti ti-copy" aria-hidden="true"></i> Copy model</div></div>
+    <div class="form-row" id="copy-backend-wrap" style="display:none">
+      <div>
+        <label for="copy-backend">Backend</label>
+        <select id="copy-backend"></select>
+      </div>
+    </div>
     <div class="form-row cols2">
       <div>
         <label for="copy-src">Source model</label>
@@ -205,7 +214,7 @@
   </div>
 
   <div class="card">
-    <div class="card-header"><div class="card-title"><i class="ti ti-upload" aria-hidden="true"></i> Push model</div></div>
+    <div class="card-header"><div class="card-title"><i class="ti ti-upload" aria-hidden="true"></i> Push model <span class="badge" id="push-backend-note" style="display:none">Ollama only</span></div></div>
     <div class="form-row">
       <div>
         <label for="push-model">Model name (must be in namespace/model format)</label>
@@ -343,7 +352,7 @@
   <div class="page-header">
     <div>
       <div class="page-title">Registry catalog</div>
-      <div class="page-sub">All models available on ollama.com — click to pull</div>
+      <div class="page-sub" id="catalog-sub">All models available on ollama.com — click to pull</div>
     </div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <div class="search-wrap">
@@ -364,6 +373,10 @@
       </select>
       <button class="btn" id="catalog-refresh-btn"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
     </div>
+  </div>
+  <div class="catalog-sources" id="catalog-source-toggle" style="display:none">
+    <button class="btn btn-sm cat-source active" data-source="ollama"><i class="ti ti-world" aria-hidden="true"></i> ollama.com</button>
+    <button class="btn btn-sm cat-source" data-source="ollaya"><i class="ti ti-arrows-split" aria-hidden="true"></i> ollaya.dev</button>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px" id="catalog-cap-filters">
     <button class="btn btn-sm cat-cap active" data-cap="all">All</button>

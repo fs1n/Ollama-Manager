@@ -4,12 +4,14 @@ import { initCatalog, loadCatalogTab } from "./pages/catalog";
 import { initChat, loadChat, loadEmbeddings, loadGenerate } from "./pages/chat";
 import { connect, initDashboard, loadAppVersion, loadDashboard } from "./pages/dashboard";
 import { initLiteLLM, loadLiteLLMStatus } from "./pages/litellm";
-import { initModels, loadModels, loadRunning } from "./pages/models";
+import { initModels, loadCopy, loadModels, loadPull, loadRunning } from "./pages/models";
 import { initModal } from "./ui/modal";
 
 registerPageLoader("dashboard", loadDashboard);
 registerPageLoader("models", loadModels);
 registerPageLoader("running", loadRunning);
+registerPageLoader("pull", loadPull);
+registerPageLoader("copy", loadCopy);
 registerPageLoader("chat", loadChat);
 registerPageLoader("generate", loadGenerate);
 registerPageLoader("embeddings", loadEmbeddings);

@@ -217,3 +217,44 @@
 #catalog-search {
   padding-right: 28px;
 }
+
+/* ollaya.dev source */
+.catalog-sources {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.cat-source.active {
+  background: var(--accent);
+  color: #0f0f0f;
+  border-color: transparent;
+}
+.cap-badge.cap-ollaya {
+  background: rgba(255, 170, 51, 0.1);
+  color: var(--warning);
+  border: 1px solid rgba(255, 170, 51, 0.25);
+}
+.catalog-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tag-chip {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border2);
+  background: var(--bg4);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.tag-chip:hover {
+  border-color: var(--accent);
+}
+.tag-chip.installed {
+  border-color: rgba(200, 240, 96, 0.3);
+  color: var(--accent);
+}

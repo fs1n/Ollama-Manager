@@ -34,7 +34,10 @@ A framework-less SPA built as ES modules:
 - **`public/src/app.ts`** — entry point: imports page modules, registers page loaders, and boots auth + initial page.
 - **`public/src/nav.ts`** — hash-based router (`/#chat`, `/#models`, etc.) and page activation.
 - **`public/src/api.ts`** — session-aware fetch wrapper, `apiOk()` error-throwing variant, and `readNdjsonLines()` for streaming NDJSON responses.
-- **`public/src/state/models.ts`** — shared in-memory cache of installed/running models used across pages.
+- **`public/src/state/backends.ts`** — the backend list from `GET /api/backends` (id, kind, label, capabilities, live status).
+- **`public/src/state/models.ts`** — shared in-memory cache of installed/running models across **all** backends. Every model carries `backend` and `key` (`"{backend}/{name}"`); a failing backend only records an entry in `backendErrors`.
+- **`public/src/ui/backend.ts`** — backend badge, backend filter chips, "could not load" banner and backend `<select>` helper; all render nothing while only one backend exists.
+- **`public/src/utils/backends.ts`** — pure helpers (`backendPath()`, model keys, `expires_at` formatting, error descriptions) + tests.
 - **`public/src/ui/{toast,modal,confirm}.ts`** — small reusable UI primitives.
 - **`public/src/pages/*.ts`** — one module per nav tab (`dashboard`, `models`, `chat` which also covers generate/embed, `catalog`, `litellm`, `auth`).
 - **`public/src/styles/*.css`** — `@layer`-based CSS modules, with `main.css` as the entry point imported from `public/index.html`.
@@ -42,6 +45,8 @@ A framework-less SPA built as ES modules:
 Frontend patterns:
 
 - State is in-memory only; page refresh resets it. The auth session is stored as an httpOnly cookie (and optionally returned as a token for API clients).
+- Pages talk to backends only through `backendPath(backendId, "/tags")` → `/api/backends/{id}/tags`, never the legacy `/api/*` alias. Models are addressed by their key, so the same name on two backends stays distinct.
+- Features are gated by backend **capabilities** (`chat`, `generate`, `embed`, `decide`, …), not by backend name; with only Ollama configured the UI looks as before.
 - Event delegation is preferred: most click handlers live on parent containers and use `data-action` / `data-page` attributes.
 - Chat/generate/pull streams use `readNdjsonLines()` and can be aborted with the same button that starts them.
 

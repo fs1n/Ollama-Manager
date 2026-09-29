@@ -1,3 +1,5 @@
+import { describeApiError } from "./utils/backends";
+
 // Auth rides on the httpOnly om_session cookie, which same-origin fetch sends
 // automatically — no token is stored or readable in JS.
 
@@ -23,13 +25,13 @@ export function api(path: string, opts: RequestInit = {}): Promise<Response> {
 }
 
 export async function httpErrorDetail(r: Response): Promise<string> {
-  let detail = "";
+  let body: unknown = null;
   try {
-    detail = (await r.json()).error || "";
+    body = await r.json();
   } catch {
-    // response body wasn't JSON — fall through with an empty detail
+    // response body wasn't JSON — fall through with just the status
   }
-  return `HTTP ${r.status}${detail ? ` — ${detail}` : ""}`;
+  return describeApiError(r.status, body);
 }
 
 // api() that throws on any non-2xx response, with the server's error detail in
