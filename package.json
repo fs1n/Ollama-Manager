@@ -1,6 +1,6 @@
 {
   "name": "ollama-manager",
-  "version": "0.2.3",
+  "version": "1.0.0-BETA",
   "description": "Web UI for managing Ollama models, with automatic LiteLLM model sync",
   "type": "module",
   "scripts": {
