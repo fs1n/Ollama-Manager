@@ -1,3 +1,5 @@
+import { firstFocusable, trapFocus } from "./focus";
+
 let modalTrigger: HTMLElement | null = null;
 
 export function openModal(
@@ -13,12 +15,7 @@ export function openModal(
   (document.getElementById("modal-title-text") as HTMLElement).textContent = title;
   const overlay = document.getElementById("modal-overlay") as HTMLElement;
   overlay.classList.add("open");
-  if (focus) {
-    const firstFocusable = overlay.querySelector<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-    );
-    firstFocusable?.focus();
-  }
+  if (focus) firstFocusable(overlay)?.focus();
 }
 
 function closeModalNow(): void {
@@ -42,22 +39,5 @@ export function initModal(): void {
     if (e.key === "Escape" && overlay.classList.contains("open")) closeModalNow();
   });
 
-  overlay.addEventListener("keydown", (e) => {
-    if (e.key !== "Tab") return;
-    const focusable = Array.from(
-      overlay.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      ),
-    );
-    if (focusable.length === 0) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  });
+  overlay.addEventListener("keydown", (e) => trapFocus(overlay, e));
 }

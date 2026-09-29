@@ -3,7 +3,14 @@ import { renderMarkdown } from "../render/markdown";
 import { ensureModels, populateModelSelects } from "../state/models";
 import { toast } from "../ui/toast";
 import { backendPath, parseModelKey } from "../utils/backends";
-import { escHtml } from "../utils/format";
+import { errorMessage, escHtml, isAbortError } from "../utils/format";
+
+interface ChatLine {
+  message?: { content?: string; thinking?: string };
+}
+interface GenerateLine {
+  response?: string;
+}
 
 // The model <select>s hold model keys ("backend/name"); resolve one to the
 // backend endpoint and the plain model name the backend expects.
@@ -93,7 +100,7 @@ async function sendChat(): Promise<void> {
 
     let firstChunk = true;
 
-    for await (const ev of readNdjsonLines(r)) {
+    for await (const ev of readNdjsonLines<ChatLine>(r)) {
       if (ev.message?.content) {
         if (firstChunk) {
           contentEl.textContent = "";
@@ -117,9 +124,9 @@ async function sendChat(): Promise<void> {
 
     chatHistory.push({ role: "assistant", content: full });
     contentEl.innerHTML = renderMarkdown(contentEl.textContent || "");
-  } catch (e: any) {
+  } catch (e) {
     // Roll back user message on failure (except for partial-success aborts)
-    if (e.name === "AbortError") {
+    if (isAbortError(e)) {
       if (full) {
         contentEl.appendChild(document.createTextNode("\n\n[stopped]"));
         chatHistory.push({ role: "assistant", content: full });
@@ -128,7 +135,7 @@ async function sendChat(): Promise<void> {
         chatHistory.pop();
       }
     } else {
-      contentEl.textContent = `Error: ${e.message}`;
+      contentEl.textContent = `Error: ${errorMessage(e)}`;
       toast("Chat request failed", "error");
       chatHistory.pop(); // remove the user msg that never got answered
     }
@@ -175,11 +182,11 @@ async function doGenerate(): Promise<void> {
       body: JSON.stringify(body),
       signal: genAbort.signal,
     });
-    for await (const ev of readNdjsonLines(r)) {
+    for await (const ev of readNdjsonLines<GenerateLine>(r)) {
       if (ev.response) out.appendChild(document.createTextNode(ev.response));
     }
-  } catch (e: any) {
-    if (e.name !== "AbortError") toast(`Generate failed: ${e.message}`, "error");
+  } catch (e) {
+    if (!isAbortError(e)) toast(`Generate failed: ${errorMessage(e)}`, "error");
   } finally {
     genAbort = null;
     genBtn.innerHTML = '<i class="ti ti-wand" aria-hidden="true"></i> Generate';
@@ -228,8 +235,8 @@ async function doEmbed(): Promise<void> {
       .join("\n");
     (document.getElementById("embed-result") as HTMLElement).textContent = preview;
     toast(`Generated ${vecs.length} embedding(s) — ${vecs[0]?.length} dims`, "success");
-  } catch (e: any) {
-    toast(`Embed failed: ${e.message}`, "error");
+  } catch (e) {
+    toast(`Embed failed: ${errorMessage(e)}`, "error");
   }
 }
 

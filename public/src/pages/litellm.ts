@@ -1,6 +1,6 @@
 import { apiOk } from "../api";
 import { toast } from "../ui/toast";
-import { escHtml } from "../utils/format";
+import { errorMessage, escHtml } from "../utils/format";
 
 interface SyncDetail {
   status: "success" | "skipped" | "failed" | "info";
@@ -49,7 +49,7 @@ function renderLiteLLMStatus(
       <div class="info-item"><div class="info-label">Skipped</div><div class="info-value" style="color:var(--warning)">${last.skipped}</div></div>
       <div class="info-item"><div class="info-label">Failed</div><div class="info-value" style="color:var(--danger)">${last.failed}</div></div>
     </div>
-    <div class="pull-log" style="max-height:200px">${last.details.map((l) => `<span class="log-line ${syncLogClass(l.status)}">${escHtml(l.message)}</span>`).join("")}</div>`;
+    <div class="pull-log">${last.details.map((l) => `<span class="log-line ${syncLogClass(l.status)}">${escHtml(l.message)}</span>`).join("")}</div>`;
 }
 
 export async function loadLiteLLMStatus(): Promise<void> {
@@ -80,8 +80,8 @@ async function triggerLiteLLMSync(): Promise<void> {
       result.failed > 0 ? "warning" : "success",
     );
     renderLiteLLMStatus(statusDiv, actionsDiv, d);
-  } catch (e: any) {
-    statusDiv.innerHTML = `<div class="empty"><i class="ti ti-alert-circle" aria-hidden="true"></i>Sync failed: ${escHtml(e.message)}</div>`;
+  } catch (e) {
+    statusDiv.innerHTML = `<div class="empty"><i class="ti ti-alert-circle" aria-hidden="true"></i>Sync failed: ${escHtml(errorMessage(e))}</div>`;
     toast("LiteLLM sync failed", "error");
   } finally {
     btn.disabled = false;

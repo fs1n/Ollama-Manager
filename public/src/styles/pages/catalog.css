@@ -17,9 +17,6 @@
 .catalog-card:hover {
   border-color: var(--border2);
 }
-.catalog-card.installed {
-  border-color: rgba(200, 240, 96, 0.25);
-}
 .catalog-name {
   font-family: var(--mono);
   font-size: 13px;

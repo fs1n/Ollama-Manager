@@ -52,6 +52,16 @@ export function escHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/** Message of a caught value, whatever was thrown. */
+export function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+/** True for the error fetch()/streams throw when an AbortController fires. */
+export function isAbortError(e: unknown): boolean {
+  return (e as { name?: unknown } | null)?.name === "AbortError";
+}
+
 export function baseName(name: string): string {
   return name.split(":")[0];
 }

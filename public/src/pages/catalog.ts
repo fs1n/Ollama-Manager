@@ -10,7 +10,14 @@ import {
 import { openModal } from "../ui/modal";
 import { toast } from "../ui/toast";
 import type { BackendKind } from "../utils/backends";
-import { baseName, escAttr, escHtml, parseModelSize, parsePulls } from "../utils/format";
+import {
+  baseName,
+  errorMessage,
+  escAttr,
+  escHtml,
+  parseModelSize,
+  parsePulls,
+} from "../utils/format";
 import { setPullTarget, showModel } from "./models";
 
 interface CatalogModel {
@@ -55,16 +62,23 @@ let catSort = "az";
 let catView = "all";
 let catalogDebounce: ReturnType<typeof setTimeout> | undefined;
 
+// Badge texts come from scraped ollama.com markup, so they are escaped like
+// any other remote data, and only [a-z0-9-] may reach the class attribute.
 function renderCaps(caps: string[] | undefined): string {
-  return (caps || []).map((c) => `<span class="cap-badge cap-${c}">${c}</span>`).join("");
+  return (caps || [])
+    .map((c) => {
+      const cls = c.toLowerCase().replace(/[^a-z0-9-]/g, "");
+      return `<span class="cap-badge cap-${cls}">${escHtml(c)}</span>`;
+    })
+    .join("");
 }
 
 function renderSizes(sizes: string[] | undefined, variants: string[] | undefined): string {
-  const s = (sizes || []).map((x) => `<span class="size-badge">${x}</span>`).join("");
+  const s = (sizes || []).map((x) => `<span class="size-badge">${escHtml(x)}</span>`).join("");
   const v = (variants || [])
     .map(
       (x) =>
-        `<span class="size-badge variant" title="Named variant, not a parameter count">${x}</span>`,
+        `<span class="size-badge variant" title="Named variant, not a parameter count">${escHtml(x)}</span>`,
     )
     .join("");
   return s + v;
@@ -123,10 +137,10 @@ export async function loadCatalog(): Promise<void> {
     catalogData = d.models || [];
     renderCatalog();
     toast(`Loaded ${catalogData.length} models from registry`, "success");
-  } catch (e: any) {
+  } catch (e) {
     wrap.innerHTML =
       '<div class="empty"><i class="ti ti-alert-circle" aria-hidden="true"></i>Failed to load catalog</div>';
-    toast(`Catalog load failed: ${e.message}`, "error");
+    toast(`Catalog load failed: ${errorMessage(e)}`, "error");
   }
 }
 

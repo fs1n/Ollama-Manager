@@ -56,18 +56,6 @@
 }
 
 /* Pull progress */
-.pull-log {
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text2);
-  max-height: 160px;
-  overflow-y: auto;
-  line-height: 1.8;
-}
 .pull-log .log-line {
   display: block;
 }

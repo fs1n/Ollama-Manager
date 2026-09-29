@@ -46,7 +46,11 @@ export async function apiOk(path: string, opts?: RequestInit): Promise<Response>
 
 // Parses a streamed NDJSON response body (Ollama's /api/pull, /api/chat,
 // /api/generate, …) one JSON object at a time as it arrives.
-export async function* readNdjsonLines(response: Response): AsyncGenerator<any> {
+// T describes the lines the caller expects; they are JSON from the backend,
+// so every field should be treated as optional.
+export async function* readNdjsonLines<T = Record<string, unknown>>(
+  response: Response,
+): AsyncGenerator<T> {
   if (!response.body) return;
   const reader = response.body.getReader();
   const dec = new TextDecoder();

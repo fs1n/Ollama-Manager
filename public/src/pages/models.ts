@@ -338,6 +338,15 @@ export async function setPullTarget(backend: string, name: string): Promise<void
   navigateTo("pull");
 }
 
+interface PullLine {
+  status?: string;
+  digest?: string;
+  total?: number;
+  completed?: number;
+  error?: string;
+  code?: string;
+}
+
 let pullAbort: AbortController | null = null;
 
 async function pullModel(): Promise<void> {
@@ -384,7 +393,7 @@ async function pullModel(): Promise<void> {
     let lastStatus = "";
     let succeeded = false;
 
-    for await (const ev of readNdjsonLines(r)) {
+    for await (const ev of readNdjsonLines<PullLine>(r)) {
       // Errors after the stream started arrive as a line of their own.
       if (ev.error) throw new Error(ev.code ? `${ev.error} (${ev.code})` : ev.error);
       if (ev.status)
@@ -454,6 +463,8 @@ async function copyModel(): Promise<void> {
       body: JSON.stringify({ source: src, destination: dst }),
     });
     toast(`Copied ${src} → ${dst}`, "success");
+    // Keep the Models page and every model dropdown in step with the copy.
+    fetchModels().catch(() => {});
   } catch (e) {
     toast(`Copy failed: ${e instanceof Error ? e.message : e}`, "error");
   } finally {

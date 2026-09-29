@@ -9,6 +9,15 @@ export function registerPageLoader(page: string, loader: PageLoader): void {
   loaders.set(page, loader);
 }
 
+// Looks a nav item up by comparing data-page values instead of building a CSS
+// selector from the URL hash — a hash like "#a\\b" would make the selector
+// invalid and querySelector throw, aborting the app's startup.
+function navItemFor(page: string): HTMLElement | undefined {
+  return Array.from(document.querySelectorAll<HTMLElement>(".nav-item")).find(
+    (el) => el.dataset.page === page,
+  );
+}
+
 export function activatePage(name: string): void {
   document.querySelectorAll<HTMLElement>(".nav-item").forEach((n) => {
     n.classList.toggle("active", n.dataset.page === name);
@@ -47,7 +56,7 @@ export function initNav(): void {
 
   window.addEventListener("hashchange", () => {
     const page = location.hash.slice(1) || "dashboard";
-    const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
+    const navItem = navItemFor(page);
     if (!navItem) return;
     if (navItem.classList.contains("active")) return;
     activatePage(page);
@@ -58,9 +67,7 @@ export function initNav(): void {
 // Runs the initial page load on startup: whatever the URL hash names (if it's
 // a real nav item), else the dashboard.
 export function startInitialPage(): void {
-  const startPage = document.querySelector(`.nav-item[data-page="${location.hash.slice(1)}"]`)
-    ? location.hash.slice(1)
-    : "dashboard";
+  const startPage = navItemFor(location.hash.slice(1)) ? location.hash.slice(1) : "dashboard";
   activatePage(startPage);
   loaders.get(startPage)?.();
 }
