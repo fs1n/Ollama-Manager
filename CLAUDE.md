@@ -81,12 +81,15 @@ bun run dev
 # Production start (builds frontend first)
 bun run start
 
-# Lint / format / fix (Biome)
+# Type-check server + frontend (strict tsconfigs)
+bun run typecheck
+
+# Lint / format / fix (Biome; also lints public/index.html)
 bun run lint
 bun run lint:fix
 bun run format
 
-# Run tests
+# Run tests (add --coverage to enforce the per-file thresholds from bunfig.toml)
 bun test
 ```
 
@@ -110,12 +113,14 @@ bun test
 ## Docker & CI
 
 - **Dockerfile**: uses `oven/bun:1-alpine`. Copies `package.json` + `bun.lock`, installs dependencies, copies `src/` and `public/`, runs `bun run build:web`, then starts `bun run src/index.ts`. `BUILD_VERSION` build-arg sets `OLLAMA_MANAGER_VERSION`.
-- **CI** (`.github/workflows/ci.yml`): runs lint, type-checks the server and frontend separately, builds the frontend, then runs tests.
+- **CI** (`.github/workflows/ci.yml`): lint, typecheck, frontend build, tests with per-file coverage thresholds, a jscpd duplicate ratchet (2 %), a non-blocking `bun audit`, and a Docker build + `/health` smoke test. Actions are pinned to commit SHAs (Dependabot keeps them current); Bun is pinned to the version in `package.json` `packageManager` and the Dockerfile.
+- **Release** (`.github/workflows/docker-image.yml`): on `v*` tags, runs the full CI via `workflow_call` first and refuses tags that don't match `package.json` `version`.
 - **Docker compose** (`docker-compose.yml`): present for local builds; points `OLLAMA_HOST` to `host.docker.internal:11434`.
 
 ## Key Patterns to Preserve
 
-- **Lint before commit**: always run `bun run lint` after making changes. Do not commit unlinted code.
+- **Lint before commit**: always run `bun run lint` and `bun run typecheck` after making changes. Do not commit unlinted code. `noExplicitAny` is an error.
+- **Frontend DOM tests** use happy-dom via `GlobalRegistrator.register()` in `beforeAll` and `unregister()` in `afterAll` of that test file only, so server tests keep Bun's own `fetch`/`Response`.
 - **Frontend build required**: browsers cannot run the authored `public/src/**/*.ts` files directly. Any change to frontend code must be reflected in `dist/public/` via `bun run build:web` before runtime or Docker build.
 - **Two tsconfigs**: `tsconfig.json` covers `src/`; `public/tsconfig.json` covers `public/src/`. Keep them separate so DOM globals and server globals do not collide.
 - **In-memory caching only**: the backend has no database. Session revocation, catalog caches and LiteLLM sync state live in process memory — every map that unauthenticated input can grow has an upper bound, keep it that way.

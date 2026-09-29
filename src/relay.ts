@@ -34,6 +34,7 @@ export async function forwardToBackend(
   backend: Backend,
   upstreamPath: string,
   fetchFn: FetchFn = fetch,
+  { connectTimeoutMs = PROXY_CONNECT_TIMEOUT_MS }: { connectTimeoutMs?: number } = {},
 ): Promise<Response> {
   const url = new URL(req.url);
   const target = `${backend.baseUrl}${upstreamPath}${url.search}`;
@@ -44,7 +45,7 @@ export async function forwardToBackend(
   const connectDeadline = setTimeout(() => {
     connectTimedOut = true;
     upstreamAbort.abort();
-  }, PROXY_CONNECT_TIMEOUT_MS);
+  }, connectTimeoutMs);
   const signal = req.signal
     ? AbortSignal.any([req.signal, upstreamAbort.signal])
     : upstreamAbort.signal;

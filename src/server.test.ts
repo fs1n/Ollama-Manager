@@ -69,6 +69,7 @@ const ollama = mockUpstream("ollama", (req, url) => {
       headers: { "Content-Type": "application/x-ndjson" },
     });
   }
+  return undefined;
 });
 
 const OLLAYA_KEY = "ollaya-secret";
@@ -80,6 +81,7 @@ const ollaya = mockUpstream("ollaya", (req, url) => {
   if (url.pathname === "/api/tags") return Response.json({ models: [{ name: "laya:en" }] });
   if (url.pathname === "/api/decide") return Response.json({ model: "laya:en", answers: {} });
   if (url.pathname === "/v1/models") return Response.json({ data: [{ id: "laya:en" }] });
+  return undefined;
 });
 
 afterAll(() => {

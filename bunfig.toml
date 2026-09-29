@@ -1,0 +1,7 @@
+# Coverage is measured per file: every source file a test imports must
+# reach these, so a new module without tests fails CI instead of hiding in
+# the total.
+[test]
+coverageThreshold = { lines = 0.75, functions = 0.6 }
+coverageSkipTestFiles = true
+coverageReporter = ["text", "lcov"]

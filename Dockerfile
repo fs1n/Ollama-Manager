@@ -1,4 +1,4 @@
-FROM oven/bun:1-alpine
+FROM oven/bun:1.3.11-alpine
 
 ARG BUILD_VERSION=dev
 ENV OLLAMA_MANAGER_VERSION=${BUILD_VERSION}

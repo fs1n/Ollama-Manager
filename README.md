@@ -74,6 +74,19 @@ another terminal with `bun run dev:web` (watches and rebuilds on change) or a
 one-off `bun run build:web`. `bun test` doesn't go through `bun run`, so run
 `bun run build:web` once beforehand if `dist/public` doesn't exist yet.
 
+### Checks
+
+The same checks CI runs (and that must pass before a release tag publishes an image):
+
+```bash
+bun run lint            # Biome, including public/index.html; warnings are errors
+bun run typecheck       # server and frontend tsconfigs, strict options
+bun run build:web
+bun test --coverage     # per-file thresholds in bunfig.toml (75 % lines, 60 % functions)
+```
+
+Release tags (`vX.Y.Z`) must match the `version` in `package.json`.
+
 ### Backends API
 
 Every configured backend is reachable under one scheme:

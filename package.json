@@ -12,15 +12,20 @@
     "dev:web": "bun build public/index.html --outdir dist/public --sourcemap=linked --watch",
     "lint": "biome check .",
     "lint:fix": "biome check . --write",
-    "format": "biome format . --write"
+    "format": "biome format . --write",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p public/tsconfig.json",
+    "test": "bun test",
+    "test:coverage": "bun test --coverage"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
     "@happy-dom/global-registrator": "^20.14.5",
     "@types/bun": "^1.4.0",
-    "happy-dom": "^20.14.5"
+    "happy-dom": "^20.14.5",
+    "typescript": "5"
   },
   "dependencies": {
     "node-html-parser": "^9.0.1"
-  }
+  },
+  "packageManager": "bun@1.3.11"
 }

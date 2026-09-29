@@ -14,7 +14,7 @@ export function parsePulls(p: string | null | undefined): number {
     .trim()
     .match(/^([\d.]+)([KMB])?$/i);
   if (!m) return 0;
-  const n = Number.parseFloat(m[1]);
+  const n = Number.parseFloat(m[1] ?? "");
   const mult =
     ({ K: 1e3, M: 1e6, B: 1e9 } as Record<string, number>)[(m[2] || "").toUpperCase()] || 1;
   return Math.round(n * mult);
@@ -31,12 +31,12 @@ export function parseModelSize(s: string | null | undefined): number {
   const str = String(s).trim().toLowerCase();
   const moe = str.match(/^(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s*([bm])$/);
   if (moe) {
-    const n = Number.parseFloat(moe[1]) * Number.parseFloat(moe[2]);
+    const n = Number.parseFloat(moe[1] ?? "") * Number.parseFloat(moe[2] ?? "");
     return moe[3] === "m" ? n / 1000 : n;
   }
   const plain = str.match(/^(\d+(?:\.\d+)?)\s*([bm])$/);
   if (plain) {
-    const n = Number.parseFloat(plain[1]);
+    const n = Number.parseFloat(plain[1] ?? "");
     return plain[2] === "m" ? n / 1000 : n;
   }
   const n = Number.parseFloat(str);
@@ -63,7 +63,7 @@ export function isAbortError(e: unknown): boolean {
 }
 
 export function baseName(name: string): string {
-  return name.split(":")[0];
+  return name.split(":")[0] ?? name;
 }
 
 export function escAttr(s: string): string {

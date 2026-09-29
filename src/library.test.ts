@@ -97,11 +97,12 @@ describe("hasNextSearchPage", () => {
 
 describe("dedupeByName", () => {
   test("keeps first occurrence per name", () => {
-    const base = parseLibraryHtml(fixture("library-llama3.1.html"))[0];
+    const [base] = parseLibraryHtml(fixture("library-llama3.1.html"));
+    if (!base) throw new Error("fixture parsed to no models");
     const dupe = { ...base, description: "shorter" };
     const out = dedupeByName([base, dupe]);
     expect(out.length).toBe(1);
-    expect(out[0].description).toBe(base.description);
+    expect(out[0]?.description).toBe(base.description);
   });
 });
 
@@ -125,10 +126,7 @@ describe("parseLibraryDetailHtml — /library/<name> tag table", () => {
   });
 
   test("each tag carries size, context and input type", () => {
-    const latest = detail.tags[0];
-    expect(latest.size).toBe("4.9GB");
-    expect(latest.context).toBe("128K");
-    expect(latest.input).toBe("Text");
+    expect(detail.tags[0]).toMatchObject({ size: "4.9GB", context: "128K", input: "Text" });
   });
 
   test("extracts page-level downloads and updated timestamp", () => {
