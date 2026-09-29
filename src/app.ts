@@ -27,10 +27,10 @@ import {
   readBodyLimited,
   withSecurityHeaders,
 } from "./http";
-import { createLiteLLMSync, type LiteLLMSync } from "./litellm";
+import { createLiteLLMSync, type LiteLLMSync, probeTypesafe, typesafeModelNames } from "./litellm";
 import { buildOpenApiSpec, SWAGGER_HTML } from "./openapi";
 import { forwardToBackend } from "./relay";
-import { createSessions, isRequestSecure, sessionCookie } from "./session";
+import { createSessions, isRequestSecure, sessionCookie, timingSafeCompare } from "./session";
 
 /** The parts of Bun's Server the handler uses; optional so tests can omit it. */
 export interface ServerLike {
@@ -83,6 +83,7 @@ export function createApp(
       fetchFn,
     });
   const openApiSpec = buildOpenApiSpec(config.version);
+  const ollaya: Backend | undefined = backends.find((b) => b.kind === "ollaya");
 
   // The built SPA shell, read on first use: a missing build is a clear 503
   // on page load instead of a crash at startup (API routes keep working).
@@ -165,6 +166,49 @@ export function createApp(
           ),
         },
       },
+    );
+  }
+
+  // The TypeSafe gateway: the only way into Ollaya that the manager offers to
+  // machines (LiteLLM's /typesafe pass-through) instead of browsers. It has its
+  // own key and exactly the three decision endpoints — never pull, delete or
+  // create, which LiteLLM would otherwise relay to anyone with a LiteLLM key.
+  function serveTypesafe({ req, server, params }: Ctx): Promise<Response> | Response {
+    if (!config.typesafeKey || !ollaya) return jsonError("TypeSafe gateway not configured", 404);
+    const ip = sessions.clientIp(req, server?.requestIP(req)?.address);
+    if (ip !== "unknown" && sessions.isRateLimited(ip)) {
+      return jsonError("Too many attempts, try again later", 429);
+    }
+    const auth = req.headers.get("authorization") || "";
+    const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+    if (!token || !timingSafeCompare(token, config.typesafeKey)) {
+      sessions.recordFailure(ip);
+      return jsonError("Unauthorized", 401, { "WWW-Authenticate": "Bearer" });
+    }
+    return forwardToBackend(req, ollaya, `/v1/${params[0]}`, fetchFn);
+  }
+
+  async function ollayaStatus(): Promise<Response> {
+    if (!ollaya) return jsonError("No Ollaya backend configured", 404);
+    let ollayaModels: string[] = [];
+    try {
+      const r = await fetchFn(`${ollaya.baseUrl}/v1/models`, {
+        headers: ollaya.apiKey ? { Authorization: `Bearer ${ollaya.apiKey}` } : {},
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (r.ok) ollayaModels = typesafeModelNames(await r.json());
+    } catch {
+      // Ollaya down: LiteLLM can't be matched against it, reported as such below
+    }
+    const status = await probeTypesafe({
+      litellmUrl: config.litellm.url,
+      litellmKey: config.litellm.key,
+      ollayaModels,
+      fetchFn,
+    });
+    return Response.json(
+      { ...status, gatewayEnabled: !!config.typesafeKey, gatewayPath: "/api/typesafe" },
+      { headers: { "Cache-Control": "no-store" } },
     );
   }
 
@@ -294,6 +338,21 @@ export function createApp(
       handler: ({ params }) => catalogs.serveLibraryDetail(params[0] ?? ""),
     },
     {
+      // Own bearer auth (OLLAYA_TYPESAFE_KEY), not the manager session: the
+      // caller is LiteLLM, not a browser.
+      methods: ["GET", "POST"],
+      path: /^\/api\/typesafe\/v1\/(systemone|decisions|models)$/,
+      access: "public",
+      slow: true,
+      handler: serveTypesafe,
+    },
+    {
+      methods: ["GET"],
+      path: "/api/litellm/ollaya-status",
+      access: "session",
+      handler: ollayaStatus,
+    },
+    {
       methods: ["GET"],
       path: "/api/litellm/status",
       access: "session",
@@ -353,7 +412,11 @@ export function createApp(
     if (!sessions.isAuthorized(req)) return jsonError("Unauthorized", 401);
 
     // Unknown paths below the manager's own namespaces are not Ollama's.
-    if (url.pathname.startsWith("/api/backends/") || url.pathname.startsWith("/api/catalog/")) {
+    if (
+      url.pathname.startsWith("/api/backends/") ||
+      url.pathname.startsWith("/api/catalog/") ||
+      url.pathname.startsWith("/api/typesafe/")
+    ) {
       return jsonError("Not found", 404);
     }
 

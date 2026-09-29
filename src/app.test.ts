@@ -300,3 +300,122 @@ describe("configuration", () => {
     });
   });
 });
+
+describe("TypeSafe gateway (/api/typesafe/v1/*)", () => {
+  const env = {
+    OLLAYA_HOST: "ollaya.test",
+    OLLAYA_API_KEY: "ollaya-key",
+    OLLAYA_TYPESAFE_KEY: "gw-key",
+  };
+  const gw = (p: string, key?: string, init: RequestInit = {}) =>
+    req(`/api/typesafe/v1/${p}`, {
+      ...init,
+      headers: key ? { Authorization: `Bearer ${key}` } : {},
+    });
+
+  test("relays the three decision endpoints with Ollaya's own key", async () => {
+    const upstream = fakeFetch(() => Response.json({ ok: true }));
+    const app = createApp(config({ ...env, MASTER_KEY: "master" }), { fetchFn: upstream.fn });
+    for (const p of ["models", "systemone", "decisions"]) {
+      const r = await app.fetch(
+        gw(p, "gw-key", {
+          method: p === "models" ? "GET" : "POST",
+          body: p === "models" ? undefined : "{}",
+        }),
+      );
+      expect({ p, status: r.status }).toEqual({ p, status: 200 });
+      expect(upstream.seen.at(-1)?.url).toBe(`http://ollaya.test:11435/v1/${p}`);
+      expect(upstream.seen.at(-1)?.headers.get("authorization")).toBe("Bearer ollaya-key");
+    }
+  });
+
+  test("works without a manager session but never without its own key", async () => {
+    const upstream = fakeFetch();
+    const app = createApp(config({ ...env, MASTER_KEY: "master" }), { fetchFn: upstream.fn });
+    const { s } = server("10.1.0.1");
+    expect((await app.fetch(gw("models"), s)).status).toBe(401);
+    const wrong = await app.fetch(gw("models", "nope"), s);
+    expect(wrong.status).toBe(401);
+    expect(wrong.headers.get("www-authenticate")).toBe("Bearer");
+    expect(upstream.seen.length).toBe(0);
+  });
+
+  test("wrong keys are rate limited like logins", async () => {
+    const app = createApp(config(env), { fetchFn: fakeFetch().fn });
+    const { s } = server("10.1.0.2");
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++) statuses.push((await app.fetch(gw("models", "nope"), s)).status);
+    expect(statuses).toEqual([401, 401, 401, 401, 401, 429]);
+  });
+
+  test("Ollaya's management API is not reachable through it", async () => {
+    const upstream = fakeFetch();
+    const app = createApp(config(env), { fetchFn: upstream.fn });
+    for (const p of [
+      "/api/typesafe/api/tags",
+      "/api/typesafe/api/delete",
+      "/api/typesafe/v1/pull",
+      "/api/typesafe/v1/../api/copy",
+    ]) {
+      const r = await app.fetch(req(p, { headers: { Authorization: "Bearer gw-key" } }));
+      expect({ p, status: r.status }).toEqual({ p, status: 404 });
+    }
+    expect(upstream.seen.filter((u) => !u.url.endsWith("/api/version")).length).toBe(0);
+  });
+
+  test("is off without OLLAYA_TYPESAFE_KEY or without an Ollaya backend", async () => {
+    const noKey = createApp(config({ OLLAYA_HOST: "ollaya.test" }), { fetchFn: fakeFetch().fn });
+    expect((await noKey.fetch(gw("models", ""))).status).toBe(404);
+    const noOllaya = createApp(config({ OLLAYA_TYPESAFE_KEY: "gw-key" }), {
+      fetchFn: fakeFetch().fn,
+    });
+    expect((await noOllaya.fetch(gw("models", "gw-key"))).status).toBe(404);
+  });
+
+  test("lifts the idle timeout: a cold model can take minutes", async () => {
+    const app = createApp(config(env), { fetchFn: fakeFetch().fn });
+    const { s, timeouts } = server();
+    await app.fetch(gw("systemone", "gw-key", { method: "POST", body: "{}" }), s);
+    expect(timeouts).toEqual([0]);
+  });
+});
+
+describe("/api/litellm/ollaya-status", () => {
+  test("reports the gateway setting and the LiteLLM probe, behind the session", async () => {
+    const upstream = fakeFetch((url) => {
+      if (url === "http://ollaya.test:11435/v1/models")
+        return Response.json({ models: [{ name: "laya:en" }] });
+      if (url === "http://litellm.test/typesafe/v1/models")
+        return Response.json({ models: [{ name: "laya:en" }] });
+      return new Response("", { status: 404 });
+    });
+    const app = createApp(
+      config({
+        MASTER_KEY: "master",
+        OLLAYA_HOST: "ollaya.test",
+        OLLAYA_TYPESAFE_KEY: "gw",
+        LITELLM_URL: "http://litellm.test",
+        LITELLM_KEY: "k",
+      }),
+      { fetchFn: upstream.fn },
+    );
+    expect((await app.fetch(req("/api/litellm/ollaya-status"))).status).toBe(401);
+    const token = await login(app);
+    const r = await app.fetch(
+      req("/api/litellm/ollaya-status", { headers: { "x-session-token": token } }),
+    );
+    expect(await r.json()).toMatchObject({
+      state: "connected",
+      managementApiExposed: false,
+      gatewayEnabled: true,
+      gatewayPath: "/api/typesafe",
+      litellmModels: ["laya:en"],
+      ollayaModels: ["laya:en"],
+    });
+  });
+
+  test("404 without an Ollaya backend", async () => {
+    const app = createApp(config(), { fetchFn: fakeFetch().fn });
+    expect((await app.fetch(req("/api/litellm/ollaya-status"))).status).toBe(404);
+  });
+});

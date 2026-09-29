@@ -13,6 +13,12 @@ export interface Config {
   publicDir: string;
   backends: Backend[];
   litellm: { url: string; key: string; intervalMin: number; enabled: boolean };
+  /**
+   * Bearer key for the TypeSafe gateway (/api/typesafe/v1/*), the restricted
+   * entry point LiteLLM's TypeSafe pass-through should use instead of talking
+   * to Ollaya directly. Empty = gateway off.
+   */
+  typesafeKey: string;
 }
 
 function readVersion(env: Record<string, string | undefined>): string {
@@ -57,5 +63,6 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
       intervalMin: intFrom(env, "LITELLM_SYNC_INTERVAL", 30),
       enabled: !!(litellmUrl && litellmKey),
     },
+    typesafeKey: (env.OLLAYA_TYPESAFE_KEY || "").trim(),
   };
 }

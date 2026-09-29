@@ -101,12 +101,35 @@ Every configured backend is reachable under one scheme:
 The original `/api/*` routes (e.g. `/api/tags`) still relay to Ollama but are deprecated in
 favor of `/api/backends/ollama/*`. Full reference at `/api/docs`.
 
+### Ollaya through LiteLLM
+
+LiteLLM (≥ 1.103) doesn't register decision models; its `/typesafe/*` pass-through forwards
+requests to one TypeSafe-compatible server (`TYPESAFE_API_BASE`). It forwards **every** path under
+`/typesafe/`, so pointing it straight at Ollaya also exposes Ollaya's management API (pull, copy,
+create, delete) to every LiteLLM key holder. Point it at the manager's gateway instead, which only
+allows `systemone`, `decisions` and `models`:
+
+```bash
+# Manager
+OLLAYA_HOST=http://ollaya:11435
+OLLAYA_TYPESAFE_KEY=<long random string>
+
+# LiteLLM proxy
+TYPESAFE_API_BASE=http://ollama-manager:3000/api/typesafe
+TYPESAFE_API_KEY=<same value as OLLAYA_TYPESAFE_KEY>
+```
+
+Clients then call `<litellm>/typesafe/v1/systemone` with a LiteLLM key (TypeSafe SDK:
+`TYPESAFE_BASE_URL=<litellm>/typesafe`). The LiteLLM page checks the setup and warns when LiteLLM
+can reach Ollaya's management API.
+
 ### Environment variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `OLLAMA_HOST` | No | Ollama API endpoint (default: `http://localhost:11434`) |
 | `OLLAYA_HOST` | No | [Ollaya](https://github.com/ollaya-dev/ollaya) endpoint; enables the Ollaya backend. `http://` and port `11435` are assumed when omitted (default: unset) |
+| `OLLAYA_TYPESAFE_KEY` | No | Enables the TypeSafe gateway `/api/typesafe/v1/*` for LiteLLM (see below); callers send it as `Authorization: Bearer …` (default: unset) |
 | `OLLAYA_API_KEY` | No | Sent to Ollaya as `Authorization: Bearer …` when Ollaya runs with `OLLAYA_API_KEY`; never exposed to the browser (default: unset) |
 | `PORT` | No | HTTP server port (default: `3000`) (very optional, DONOT CHANGE WITHOUT AN ACTUAL NEED) |
 | `MASTER_KEY` | No | No, but consider Setting it for security |

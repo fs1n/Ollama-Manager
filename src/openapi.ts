@@ -18,6 +18,11 @@ export function buildOpenApiSpec(version: string) {
           name: "x-session-token",
           description: "Session token returned by POST /api/auth (for programmatic API clients)",
         },
+        typesafeKey: {
+          type: "http",
+          scheme: "bearer",
+          description: "OLLAYA_TYPESAFE_KEY — only for /api/typesafe/v1/*",
+        },
         sessionCookie: {
           type: "apiKey",
           in: "cookie",
@@ -379,6 +384,83 @@ export function buildOpenApiSpec(version: string) {
             },
             404: { description: "Model not found in registry" },
             502: { description: "Detail scrape failed" },
+          },
+        },
+      },
+      "/api/typesafe/v1/{endpoint}": {
+        summary: "TypeSafe gateway to Ollaya",
+        description:
+          "Restricted, TypeSafe-compatible entry point for LiteLLM's /typesafe pass-through (set TYPESAFE_API_BASE to `<manager>/api/typesafe` and TYPESAFE_API_KEY to OLLAYA_TYPESAFE_KEY). Relays only `systemone`, `decisions` and `models` to Ollaya's /v1/*, with Ollaya's own key. Authenticated with `Authorization: Bearer <OLLAYA_TYPESAFE_KEY>` instead of a manager session; failed attempts are rate limited. 404 when OLLAYA_TYPESAFE_KEY or OLLAYA_HOST is unset.",
+        parameters: [
+          {
+            name: "endpoint",
+            in: "path",
+            required: true,
+            schema: { type: "string", enum: ["systemone", "decisions", "models"] },
+          },
+        ],
+        get: {
+          summary: "Model list (models)",
+          tags: ["TypeSafe gateway"],
+          security: [{ typesafeKey: [] }],
+          responses: {
+            200: { description: "Ollaya's TypeSafe model list" },
+            401: { description: "Missing or wrong gateway key" },
+            404: { description: "Gateway not configured" },
+            429: { description: "Too many failed attempts" },
+          },
+        },
+        post: {
+          summary: "Decide (systemone, decisions)",
+          tags: ["TypeSafe gateway"],
+          security: [{ typesafeKey: [] }],
+          responses: {
+            200: { description: "TypeSafe SystemOne response" },
+            401: { description: "Missing or wrong gateway key" },
+            404: { description: "Gateway not configured" },
+            422: { description: "Validation error (Ollaya's error body)" },
+            429: { description: "Too many failed attempts" },
+          },
+        },
+      },
+      "/api/litellm/ollaya-status": {
+        get: {
+          summary: "Ollaya through LiteLLM",
+          description:
+            "Checks whether LiteLLM's /typesafe pass-through reaches this Ollaya (by comparing model lists), and whether it also exposes Ollaya's native management API (it then points at Ollaya directly instead of the gateway).",
+          tags: ["LiteLLM"],
+          responses: {
+            200: {
+              description: "Probe result",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      state: {
+                        type: "string",
+                        enum: [
+                          "litellm-not-configured",
+                          "litellm-unreachable",
+                          "no-passthrough",
+                          "unauthorized",
+                          "upstream-error",
+                          "other-service",
+                          "connected",
+                        ],
+                      },
+                      detail: { type: "string" },
+                      litellmModels: { type: "array", items: { type: "string" } },
+                      ollayaModels: { type: "array", items: { type: "string" } },
+                      managementApiExposed: { type: "boolean" },
+                      gatewayEnabled: { type: "boolean" },
+                      gatewayPath: { type: "string", example: "/api/typesafe" },
+                    },
+                  },
+                },
+              },
+            },
+            404: { description: "No Ollaya backend configured" },
           },
         },
       },

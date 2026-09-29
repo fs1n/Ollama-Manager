@@ -87,7 +87,7 @@
 
     <div class="nav-section">Integrations</div>
     <div class="nav-item" data-page="litellm" tabindex="0" role="button">
-      <i class="ti ti-refresh" aria-hidden="true"></i> LiteLLM Sync
+      <i class="ti ti-refresh" aria-hidden="true"></i> LiteLLM
     </div>
   </div>
 
@@ -493,8 +493,8 @@
 <div class="page" id="page-litellm">
   <div class="page-header">
     <div>
-      <div class="page-title">LiteLLM Sync</div>
-      <div class="page-sub">Register Ollama models with your LiteLLM proxy</div>
+      <div class="page-title">LiteLLM</div>
+      <div class="page-sub">Register Ollama models with your LiteLLM proxy, and reach Ollaya's decision models through it</div>
     </div>
   </div>
   <div class="card">
@@ -512,6 +512,13 @@
         <i class="ti ti-refresh" aria-hidden="true"></i> Sync Now
       </button>
     </div>
+  </div>
+  <div class="card" id="litellm-ollaya-card" style="display:none">
+    <div class="card-header">
+      <div class="card-title"><i class="ti ti-arrows-split" aria-hidden="true"></i> Ollaya through LiteLLM</div>
+      <button type="button" class="btn btn-sm" id="litellm-ollaya-refresh"><i class="ti ti-refresh" aria-hidden="true"></i> Check again</button>
+    </div>
+    <div id="litellm-ollaya"><div class="empty"><span class="spinner"></span> Checking…</div></div>
   </div>
 </div>
 

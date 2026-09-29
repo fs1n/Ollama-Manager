@@ -4,7 +4,7 @@ import { initCatalog, loadCatalogTab } from "./pages/catalog";
 import { initChat, loadChat, loadEmbeddings, loadGenerate } from "./pages/chat";
 import { connect, initDashboard, loadAppVersion, loadDashboard } from "./pages/dashboard";
 import { initDecide, loadDecide } from "./pages/decide";
-import { initLiteLLM, loadLiteLLMStatus } from "./pages/litellm";
+import { initLiteLLM, loadLiteLLMStatus, loadOllayaThroughLiteLLM } from "./pages/litellm";
 import { initModels, loadCopy, loadModels, loadPull, loadRunning } from "./pages/models";
 import { initModal } from "./ui/modal";
 
@@ -18,7 +18,10 @@ registerPageLoader("generate", loadGenerate);
 registerPageLoader("embeddings", loadEmbeddings);
 registerPageLoader("decide", loadDecide);
 registerPageLoader("catalog", loadCatalogTab);
-registerPageLoader("litellm", loadLiteLLMStatus);
+registerPageLoader("litellm", async () => {
+  await loadLiteLLMStatus();
+  await loadOllayaThroughLiteLLM();
+});
 
 initNav();
 initModal();

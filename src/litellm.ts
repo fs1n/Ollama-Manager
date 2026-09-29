@@ -177,3 +177,132 @@ export function createLiteLLMSync({
 }
 
 export type LiteLLMSync = ReturnType<typeof createLiteLLMSync>;
+
+// ---------------------------------------------------------------------------
+// Ollaya through LiteLLM's TypeSafe pass-through
+//
+// LiteLLM (≥ 1.103) forwards everything under /typesafe/* to TYPESAFE_API_BASE
+// — not only the decision endpoints. Pointed straight at Ollaya, that also
+// hands Ollaya's management API (pull, delete, create, copy) to every LiteLLM
+// key holder. The manager's TypeSafe gateway (/api/typesafe/v1/*) only allows
+// the three decision endpoints, so that is what LiteLLM should point at.
+
+export type TypesafeState =
+  | "litellm-not-configured"
+  | "litellm-unreachable"
+  | "no-passthrough"
+  | "unauthorized"
+  | "upstream-error"
+  | "other-service"
+  | "connected";
+
+export interface TypesafeStatus {
+  state: TypesafeState;
+  /** Human-readable explanation of `state` */
+  detail: string;
+  /** Model names LiteLLM's pass-through reports */
+  litellmModels: string[];
+  /** Model names Ollaya reports on its own /v1/models */
+  ollayaModels: string[];
+  /**
+   * True when LiteLLM's pass-through also reaches Ollaya's native
+   * management API (it points at Ollaya directly, not at the gateway).
+   */
+  managementApiExposed: boolean;
+}
+
+/** Model names from a TypeSafe /v1/models body ({models:[{name}]} or {data:[{id}]}). */
+export function typesafeModelNames(body: unknown): string[] {
+  const b = (body ?? {}) as { models?: unknown; data?: unknown };
+  const list = Array.isArray(b.models) ? b.models : Array.isArray(b.data) ? b.data : [];
+  return list
+    .map((m) => {
+      const e = (m ?? {}) as { name?: unknown; id?: unknown };
+      return typeof e.name === "string" ? e.name : typeof e.id === "string" ? e.id : "";
+    })
+    .filter(Boolean);
+}
+
+export async function probeTypesafe({
+  litellmUrl,
+  litellmKey,
+  ollayaModels,
+  fetchFn = fetch as FetchFn,
+  timeoutMs = 5_000,
+}: {
+  litellmUrl: string;
+  litellmKey: string;
+  /** What Ollaya itself reports, to recognise it behind LiteLLM */
+  ollayaModels: string[];
+  fetchFn?: FetchFn;
+  timeoutMs?: number;
+}): Promise<TypesafeStatus> {
+  const base: TypesafeStatus = {
+    state: "litellm-not-configured",
+    detail: "",
+    litellmModels: [],
+    ollayaModels,
+    managementApiExposed: false,
+  };
+  if (!litellmUrl || !litellmKey) {
+    return { ...base, detail: "Set LITELLM_URL and LITELLM_KEY to check the LiteLLM side." };
+  }
+  const get = (path: string) =>
+    fetchFn(`${litellmUrl}${path}`, {
+      headers: { Authorization: `Bearer ${litellmKey}` },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+  let resp: Response;
+  try {
+    resp = await get("/typesafe/v1/models");
+  } catch (e) {
+    return {
+      ...base,
+      state: "litellm-unreachable",
+      detail: `LiteLLM unreachable: ${errorText(e)}`,
+    };
+  }
+  if (resp.status === 404) {
+    return {
+      ...base,
+      state: "no-passthrough",
+      detail: "This LiteLLM has no /typesafe pass-through (added in LiteLLM 1.103).",
+    };
+  }
+  if (resp.status === 401 || resp.status === 403) {
+    return { ...base, state: "unauthorized", detail: "LiteLLM rejected LITELLM_KEY." };
+  }
+  if (!resp.ok) {
+    return {
+      ...base,
+      state: "upstream-error",
+      detail: `LiteLLM's pass-through answered HTTP ${resp.status} — TYPESAFE_API_BASE or TYPESAFE_API_KEY on the LiteLLM side is probably wrong.`,
+    };
+  }
+  const litellmModels = typesafeModelNames(await resp.json().catch(() => null));
+
+  // Does the pass-through also reach Ollaya's native management API?
+  let managementApiExposed = false;
+  try {
+    const native = await get("/typesafe/api/tags");
+    if (native.ok) {
+      const body = (await native.json().catch(() => null)) as { models?: unknown } | null;
+      managementApiExposed = Array.isArray(body?.models);
+    }
+  } catch {
+    // unreachable here means not exposed as far as we can tell
+  }
+
+  const ours = new Set(ollayaModels);
+  const same = litellmModels.length === ours.size && litellmModels.every((name) => ours.has(name));
+  return {
+    ...base,
+    litellmModels,
+    managementApiExposed,
+    state: same ? "connected" : "other-service",
+    detail: same
+      ? "LiteLLM's /typesafe pass-through reaches this Ollaya."
+      : "LiteLLM's /typesafe pass-through reaches a different TypeSafe service (e.g. the TypeSafe cloud or another Ollaya).",
+  };
+}

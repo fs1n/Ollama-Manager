@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createLiteLLMSync } from "./litellm";
+import { createLiteLLMSync, probeTypesafe, typesafeModelNames } from "./litellm";
 
 function fakeLiteLLM({
   ollamaModels,
@@ -79,5 +79,61 @@ describe("LiteLLM sync", () => {
 
   test("is disabled without URL and key", () => {
     expect(createLiteLLMSync({ ...base, url: "" }).enabled).toBe(false);
+  });
+});
+
+describe("probeTypesafe (Ollaya behind LiteLLM's /typesafe pass-through)", () => {
+  const probe = (
+    respond: (url: string) => Response | Promise<Response>,
+    ollayaModels = ["laya:en"],
+  ) =>
+    probeTypesafe({
+      litellmUrl: "http://litellm",
+      litellmKey: "k",
+      ollayaModels,
+      fetchFn: async (url) => respond(url),
+    });
+  const models = (...names: string[]) => Response.json({ models: names.map((name) => ({ name })) });
+
+  test("not configured without URL and key", async () => {
+    const r = await probeTypesafe({ litellmUrl: "", litellmKey: "", ollayaModels: [] });
+    expect(r.state).toBe("litellm-not-configured");
+  });
+
+  test("the states LiteLLM's answers map to", async () => {
+    expect((await probe(() => new Response("", { status: 404 }))).state).toBe("no-passthrough");
+    expect((await probe(() => new Response("", { status: 401 }))).state).toBe("unauthorized");
+    expect((await probe(() => new Response("", { status: 500 }))).state).toBe("upstream-error");
+    expect(
+      (
+        await probe(() => {
+          throw new Error("ECONNREFUSED");
+        })
+      ).state,
+    ).toBe("litellm-unreachable");
+  });
+
+  test("same models: connected; other models: a different TypeSafe service", async () => {
+    const ok = await probe((url) =>
+      url.endsWith("/v1/models") ? models("laya:en") : new Response("", { status: 401 }),
+    );
+    expect(ok).toMatchObject({ state: "connected", managementApiExposed: false });
+    const cloud = await probe((url) =>
+      url.endsWith("/v1/models") ? models("jev-latest") : new Response("", { status: 404 }),
+    );
+    expect(cloud).toMatchObject({ state: "other-service", litellmModels: ["jev-latest"] });
+  });
+
+  test("flags a pass-through that also reaches Ollaya's management API", async () => {
+    const r = await probe((url) =>
+      url.endsWith("/api/tags") ? models("laya:en") : models("laya:en"),
+    );
+    expect(r).toMatchObject({ state: "connected", managementApiExposed: true });
+  });
+
+  test("model names from either TypeSafe list shape", () => {
+    expect(typesafeModelNames({ models: [{ name: "a" }, {}] })).toEqual(["a"]);
+    expect(typesafeModelNames({ data: [{ id: "b" }] })).toEqual(["b"]);
+    expect(typesafeModelNames(null)).toEqual([]);
   });
 });

@@ -38,6 +38,8 @@ Key backend behaviors:
 - **Timeouts**: `Bun.serve` keeps `idleTimeout: 60`; routes marked `slow` (backend relay, legacy alias, LiteLLM sync) call `server.timeout(req, 0)` because a model cold start can take longer than that before the first byte.
 - **Dot segments**: Bun resolves `.`/`..` in `req.url` before the handler runs, so `/api/backends/x/../../tags` is routed (and gated) as `/api/tags`.
 - **LiteLLM sync**: optional background sync of local Ollama models to a LiteLLM proxy via `LITELLM_URL` + `LITELLM_KEY`.
+- **TypeSafe gateway** (`/api/typesafe/v1/{systemone,decisions,models}`): the restricted entry point for LiteLLM's `/typesafe` pass-through. Enabled by `OLLAYA_TYPESAFE_KEY`, authenticated with that bearer key instead of a session (`access: "public"` + own check, failures rate limited), relays with Ollaya's key. Never add other Ollaya paths here: LiteLLM forwards every `/typesafe/*` path, so this allowlist is what keeps Ollaya's management API away from LiteLLM key holders.
+- **`/api/litellm/ollaya-status`**: probes LiteLLM's `/typesafe/v1/models` against Ollaya's `/v1/models` and `/typesafe/api/tags` to detect a pass-through that points at Ollaya directly (`managementApiExposed`).
 - **Security headers**: CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` are applied to every response. `/api/docs` gets a looser CSP for Swagger UI's external scripts.
 
 ### Frontend (`public/src/`)
@@ -104,6 +106,7 @@ bun test
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama API endpoint to proxy |
 | `OLLAYA_HOST` | *(unset)* | Ollaya endpoint; enables the `ollaya` backend (`http://` and port `11435` assumed) |
 | `OLLAYA_API_KEY` | *(unset)* | Bearer key the manager sends to Ollaya (server-side only) |
+| `OLLAYA_TYPESAFE_KEY` | *(unset)* | Enables the TypeSafe gateway for LiteLLM; its callers' bearer key |
 | `MASTER_KEY` | *(unset)* | If set, enables login screen + API auth gate |
 | `PORT` | `3000` | HTTP server port |
 | `OLLAMA_MANAGER_VERSION` | `package.json` version → `"dev"` | App version exposed to frontend |
