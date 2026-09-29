@@ -52,7 +52,9 @@ A framework-less SPA built as ES modules:
 - **`public/src/ui/backend.ts`** — backend badge, backend filter chips, "could not load" banner and backend `<select>` helper; all render nothing while only one backend exists.
 - **`public/src/utils/backends.ts`** — pure helpers (`backendPath()`, model keys, `expires_at` formatting, error descriptions) + tests.
 - **`public/src/ui/{toast,modal,confirm}.ts`** — small reusable UI primitives.
-- **`public/src/pages/*.ts`** — one module per nav tab (`dashboard`, `models`, `chat` which also covers generate/embed, `catalog`, `litellm`, `auth`).
+- **`public/src/pages/*.ts`** — one module per nav tab (`dashboard`, `models`, `chat` which also covers generate/embed, `decide`, `catalog`, `litellm`, `auth`).
+- **`public/src/pages/decide.ts`** + **`public/src/utils/decide.ts`** — the Decide playground for decision models (Ollaya `/api/decide`): question editor ↔ JSON, built-in questions from `/api/show`, presets, probability bars, 422 issues mapped to their question, "save as model" via `/api/create`. All schema logic lives in the pure, tested `utils/decide.ts`.
+- Nav items with `data-requires="<capability>"` are shown only when some backend has that capability (`applyCapabilityNav()` in `ui/backend.ts`).
 - **`public/src/styles/*.css`** — `@layer`-based CSS modules, with `main.css` as the entry point imported from `public/index.html`.
 
 Frontend patterns:

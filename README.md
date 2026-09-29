@@ -7,6 +7,7 @@ Features:
 - Browse the Ollama registry catalog and pull models
 - View installed and running models
 - Chat, generate, and embeddings testing
+- Optional [Ollaya](https://github.com/ollaya-dev/ollaya) backend side by side with Ollama (`OLLAYA_HOST`): decision models in the same lists, the ollaya.dev catalog, and a **Decide** playground to ask typed questions (choice / score / yes-no), see calibrated probabilities and save question sets as models
 - Simple Master-Key authentication
 - Model Sync to LiteLLM
 - API to interact with the manager programmatically with (Swagger UI) at `/api/docs`

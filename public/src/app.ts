@@ -3,6 +3,7 @@ import { checkSession, initAuth } from "./pages/auth";
 import { initCatalog, loadCatalogTab } from "./pages/catalog";
 import { initChat, loadChat, loadEmbeddings, loadGenerate } from "./pages/chat";
 import { connect, initDashboard, loadAppVersion, loadDashboard } from "./pages/dashboard";
+import { initDecide, loadDecide } from "./pages/decide";
 import { initLiteLLM, loadLiteLLMStatus } from "./pages/litellm";
 import { initModels, loadCopy, loadModels, loadPull, loadRunning } from "./pages/models";
 import { initModal } from "./ui/modal";
@@ -15,6 +16,7 @@ registerPageLoader("copy", loadCopy);
 registerPageLoader("chat", loadChat);
 registerPageLoader("generate", loadGenerate);
 registerPageLoader("embeddings", loadEmbeddings);
+registerPageLoader("decide", loadDecide);
 registerPageLoader("catalog", loadCatalogTab);
 registerPageLoader("litellm", loadLiteLLMStatus);
 
@@ -24,6 +26,7 @@ initAuth();
 initDashboard();
 initModels();
 initChat();
+initDecide();
 initCatalog();
 initLiteLLM();
 

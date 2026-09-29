@@ -1,6 +1,6 @@
 import { getBackends, loadBackends } from "../state/backends";
 import { fetchModels, refreshRunning } from "../state/models";
-import { backendBadge } from "../ui/backend";
+import { applyCapabilityNav, backendBadge } from "../ui/backend";
 import { toast } from "../ui/toast";
 import { statusSummary } from "../utils/backends";
 import { escHtml, fmtSize } from "../utils/format";
@@ -60,6 +60,7 @@ export async function connect(): Promise<void> {
   }
   lastKnownStatus.delete("*");
   setStatus();
+  applyCapabilityNav();
   await loadDashboard();
 }
 

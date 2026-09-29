@@ -7,6 +7,17 @@ import { backendErrors } from "../state/models";
 import type { BackendCapability, BackendFilter } from "../utils/backends";
 import { escHtml } from "../utils/format";
 
+/**
+ * Shows the nav items whose `data-requires` capability some backend has
+ * (e.g. Decide only with an Ollaya backend) and hides the others.
+ */
+export function applyCapabilityNav(): void {
+  const caps = new Set(getBackends().flatMap((b) => b.capabilities));
+  document.querySelectorAll<HTMLElement>(".nav-item[data-requires]").forEach((item) => {
+    item.style.display = caps.has(item.dataset.requires as BackendCapability) ? "" : "none";
+  });
+}
+
 /** Badge naming the model's backend; empty while only one backend exists. */
 export function backendBadge(id: string): string {
   if (!hasMultipleBackends()) return "";

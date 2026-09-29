@@ -133,6 +133,16 @@
   .pull-target {
     flex-direction: column;
   }
+  .q-head,
+  .q-row {
+    grid-template-columns: 1fr;
+  }
+  .q-row.level {
+    grid-template-columns: 28px 1fr auto;
+  }
+  .prob-row {
+    grid-template-columns: 90px 1fr 56px;
+  }
   .backend-card-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

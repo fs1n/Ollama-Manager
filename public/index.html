@@ -72,14 +72,17 @@
     </div>
 
     <div class="nav-section">Test</div>
-    <div class="nav-item" data-page="chat" tabindex="0" role="button">
+    <div class="nav-item" data-page="chat" data-requires="chat" tabindex="0" role="button">
       <i class="ti ti-messages" aria-hidden="true"></i> Chat
     </div>
-    <div class="nav-item" data-page="generate" tabindex="0" role="button">
+    <div class="nav-item" data-page="generate" data-requires="generate" tabindex="0" role="button">
       <i class="ti ti-wand" aria-hidden="true"></i> Generate
     </div>
-    <div class="nav-item" data-page="embeddings" tabindex="0" role="button">
+    <div class="nav-item" data-page="embeddings" data-requires="embed" tabindex="0" role="button">
       <i class="ti ti-vector" aria-hidden="true"></i> Embeddings
+    </div>
+    <div class="nav-item" data-page="decide" data-requires="decide" tabindex="0" role="button" style="display:none">
+      <i class="ti ti-arrows-split" aria-hidden="true"></i> Decide
     </div>
 
     <div class="nav-section">Integrations</div>
@@ -344,6 +347,97 @@
       <label>Raw vectors (truncated)</label>
       <div class="embed-result" id="embed-result"></div>
     </div>
+  </div>
+</div>
+
+<!-- DECIDE -->
+<div class="page" id="page-decide">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Decide</div>
+      <div class="page-sub">Ask a decision model typed questions about a state — calibrated answers, no text generation</div>
+    </div>
+    <select id="decide-preset" aria-label="Load an example" style="width:200px">
+      <option value="">Load an example…</option>
+    </select>
+  </div>
+
+  <div class="card">
+    <div class="form-row cols2">
+      <div>
+        <label for="decide-model">Model</label>
+        <select id="decide-model"></select>
+      </div>
+      <div>
+        <label for="decide-keep-alive">Keep loaded after the answer</label>
+        <select id="decide-keep-alive">
+          <option value="">Server default (5 minutes)</option>
+          <option value="30m">30 minutes</option>
+          <option value="-1">Until unloaded</option>
+          <option value="0">Unload right away</option>
+        </select>
+      </div>
+    </div>
+    <div class="decide-hint" id="decide-model-info"></div>
+    <label for="decide-state">State</label>
+    <textarea id="decide-state" rows="5" placeholder="A message, an email, a ticket — or JSON"></textarea>
+    <div class="decide-hint">Plain text, or JSON: objects and arrays are sent as JSON.</div>
+    <div class="decide-image">
+      <label for="decide-image">Image <span class="decide-hint">(vision models only, one PNG)</span></label>
+      <input type="file" id="decide-image" accept="image/png">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><i class="ti ti-list-check" aria-hidden="true"></i> Questions</div>
+      <div class="decide-modes" id="decide-modes">
+        <button type="button" class="btn btn-sm decide-mode active" data-mode="form">Editor</button>
+        <button type="button" class="btn btn-sm decide-mode" data-mode="json">JSON</button>
+      </div>
+    </div>
+    <div id="decide-builtin" class="decide-builtin" style="display:none"></div>
+    <div id="decide-questions"></div>
+    <textarea id="decide-questions-json" rows="14" spellcheck="false" style="display:none" aria-label="Questions as JSON"></textarea>
+    <div class="decide-add" id="decide-add">
+      <button type="button" class="btn btn-sm" data-add="choice"><i class="ti ti-plus" aria-hidden="true"></i> Choice</button>
+      <button type="button" class="btn btn-sm" data-add="score"><i class="ti ti-plus" aria-hidden="true"></i> Score</button>
+      <button type="button" class="btn btn-sm" data-add="noul"><i class="ti ti-plus" aria-hidden="true"></i> Yes / no</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="decide-run">
+      <label class="decide-check"><input type="checkbox" id="decide-extras"> Include laya details (entropy confidence, act probability)</label>
+      <button type="button" class="btn btn-primary" id="decide-btn"><i class="ti ti-arrows-split" aria-hidden="true"></i> Decide</button>
+    </div>
+    <div id="decide-errors"></div>
+  </div>
+
+  <div class="card" id="decide-result-card" style="display:none">
+    <div class="card-header">
+      <div class="card-title"><i class="ti ti-chart-bar" aria-hidden="true"></i> Answers</div>
+    </div>
+    <div id="decide-result"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><i class="ti ti-device-floppy" aria-hidden="true"></i> Save as model</div>
+    </div>
+    <div class="decide-hint" style="margin-bottom:12px">Bakes the current questions into a new model on the same backend, so it can be called without sending them (Ollaya <code>/api/create</code>).</div>
+    <div class="form-row cols2">
+      <div>
+        <label for="decide-save-name">New model name</label>
+        <input type="text" id="decide-save-name" placeholder="triage">
+      </div>
+      <div>
+        <label for="decide-save-desc">Description (optional)</label>
+        <input type="text" id="decide-save-desc" placeholder="Support ticket triage">
+      </div>
+    </div>
+    <button type="button" class="btn" id="decide-save-btn"><i class="ti ti-device-floppy" aria-hidden="true"></i> Create model</button>
+    <div id="decide-save-log" class="pull-log" style="display:none;margin-top:12px"></div>
   </div>
 </div>
 
