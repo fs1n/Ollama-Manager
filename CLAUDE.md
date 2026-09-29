@@ -10,14 +10,18 @@ Ollama Manager is a lightweight web UI for managing an Ollama instance. It consi
 
 ### Backend (`src/`)
 
-- **`src/index.ts`** — main `Bun.serve()` entry point. Handles routing, the Ollama proxy, registry scraping, LiteLLM sync, OpenAPI/Swagger, and security headers.
+- **`src/index.ts`** — main `Bun.serve()` entry point. Handles routing, the backend relay, registry scraping, LiteLLM sync, OpenAPI/Swagger, and security headers.
+- **`src/backends.ts`** — backend registry (Ollama always, Ollaya when `OLLAYA_HOST` is set), the `/api/backends/{id}/…` path mapping + per-kind allowlist, upstream header handling, and status probes.
 - **`src/auth.ts`** — stateless HMAC-signed session tokens, cookie parsing, and session helpers. Tokens are signed with a secret derived from `MASTER_KEY`; no in-memory session store is required, but revoked/logged-out tokens are remembered until expiry.
 - **`src/library.ts`** — HTML parsers for `ollama.com/library` and `ollama.com/search`, plus `parseLibraryDetailHtml()` for per-model tag tables.
 
 Key backend behaviors:
 
 - **Static files**: at runtime the server reads the frontend from `dist/public/` (produced by `bun run build:web`). The authored `public/index.html` references TypeScript/CSS modules directly and cannot run in browsers without bundling.
-- **API proxy**: all `/api/*` requests not handled explicitly are forwarded to `OLLAMA_HOST` via `forwardToOllama()`. Browser-originated `origin`, `referer`, and the manager's own `cookie` headers are stripped before the upstream request.
+- **Backend relay**: `/api/backends/{id}/{path}` is forwarded to `{baseUrl}/api/{path}` of that backend via `forwardToBackend()` (Ollaya additionally exposes `v1/systemone|decisions|models`). Ollaya only accepts its documented endpoints; unknown ids and disallowed paths return 404 without an upstream call. `GET /api/backends` lists backends with live status and capabilities.
+- **Legacy proxy**: all other `/api/*` requests not handled explicitly are still forwarded to Ollama (deprecated alias for `/api/backends/ollama/*`).
+- **Upstream headers**: `origin`, `referer`, `cookie` and `x-session-token` are stripped before every upstream request; for Ollaya the caller's `authorization` is replaced by `OLLAYA_API_KEY`.
+- **Ollaya catalog** (`/api/catalog/ollaya`): reads ollaya.dev's static `/search.json` index, cached for 1 hour; a failed refresh serves the previous list marked `stale`.
 - **Registry catalog** (`/api/catalog/library`): scrapes `ollama.com/library`, falls back to HTMX-paginated `/search` if the markup changes, and caches results in memory for 1 hour. Per-model details are cached for 6 hours.
 - **Authentication**: optional master-key auth. If `MASTER_KEY` is set, API routes (not static files or public endpoints) require a valid session token provided either as an httpOnly `om_session` cookie or an `x-session-token` header. Public endpoints (`/api/session`, `/api/auth`, `/api/logout`, `/api/app-version`, `/api/openapi.json`, `/api/docs`, `/health`) are checked *before* the auth gate.
 - **LiteLLM sync**: optional background sync of local Ollama models to a LiteLLM proxy via `LITELLM_URL` + `LITELLM_KEY`.
@@ -75,6 +79,8 @@ bun test
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama API endpoint to proxy |
+| `OLLAYA_HOST` | *(unset)* | Ollaya endpoint; enables the `ollaya` backend (`http://` and port `11435` assumed) |
+| `OLLAYA_API_KEY` | *(unset)* | Bearer key the manager sends to Ollaya (server-side only) |
 | `MASTER_KEY` | *(unset)* | If set, enables login screen + API auth gate |
 | `PORT` | `3000` | HTTP server port |
 | `OLLAMA_MANAGER_VERSION` | `package.json` version → `"dev"` | App version exposed to frontend |
@@ -96,7 +102,8 @@ bun test
 - **Two tsconfigs**: `tsconfig.json` covers `src/`; `public/tsconfig.json` covers `public/src/`. Keep them separate so DOM globals and server globals do not collide.
 - **In-memory caching only**: the backend has no database. Session revocation, catalog cache, catalog detail cache, and LiteLLM sync state live in process memory.
 - **Auth gate ordering**: static files and public endpoints are checked *before* the `MASTER_KEY` auth gate. Do not accidentally move the auth check above public routes.
-- **Ollama header stripping**: `forwardToOllama()` deletes `origin`, `referer`, and `cookie` from outgoing headers. This is required for CORS/origin validation and to avoid leaking the manager's session cookie upstream.
+- **Upstream header stripping**: `upstreamHeaders()` (used by `forwardToBackend()`) deletes `origin`, `referer`, `cookie` and `x-session-token` from outgoing headers. This is required for the backends' origin validation and to avoid leaking the manager's session upstream.
+- **Backend allowlist**: new Ollaya endpoints must be added to the allowlist in `src/backends.ts` explicitly; never relay arbitrary paths to Ollaya.
 - **No inline scripts/handlers**: the frontend CSP relies on external ES modules. Avoid inline `<script>` tags and inline `onclick`/`onchange` attributes in `public/index.html` or dynamically generated markup; wire events via `addEventListener` in page modules.
 
 ## File Layout
@@ -105,6 +112,7 @@ bun test
 src/
   index.ts          # Bun server — routing, proxy, scraper, sync, OpenAPI
   auth.ts           # Stateless HMAC-signed session tokens + cookies
+  backends.ts       # Backend registry, path mapping, upstream headers
   library.ts        # ollama.com library/search/detail parsers
   *.test.ts         # Backend unit tests
 public/

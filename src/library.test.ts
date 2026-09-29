@@ -6,6 +6,7 @@ import {
   hasNextSearchPage,
   parseLibraryDetailHtml,
   parseLibraryHtml,
+  parseOllayaSearchIndex,
   parseUpdatedTitle,
 } from "./library";
 
@@ -133,5 +134,63 @@ describe("parseLibraryDetailHtml — /library/<name> tag table", () => {
   test("extracts page-level downloads and updated timestamp", () => {
     expect(detail.pulls).toBe("118.7M");
     expect(detail.updatedAt).toBe("2024-11-30T22:34:00.000Z");
+  });
+});
+
+describe("parseOllayaSearchIndex — ollaya.dev /search.json", () => {
+  const models = parseOllayaSearchIndex(JSON.parse(fixture("ollaya-search.json")));
+
+  test("reads models in editorial order with their tags", () => {
+    expect(models.map((m) => m.name)).toEqual(["winnow", "laya"]);
+    const laya = models[1];
+    expect(laya?.rank).toBe(2);
+    expect(laya?.updated).toBe("2026-09-23");
+    expect(laya?.capabilities).toContain("router");
+    expect(laya?.description).toStartWith("Open decision models");
+    expect(laya?.tags[0]).toEqual({
+      name: "laya:en",
+      summary: "English. Best for guardrails and email triage.",
+    });
+  });
+
+  test("drops the site-only fields", () => {
+    expect(Object.keys(models[0] ?? {}).sort()).toEqual(
+      ["capabilities", "description", "name", "rank", "tags", "updated"].sort(),
+    );
+  });
+
+  test("tolerates missing and malformed fields", () => {
+    const parsed = parseOllayaSearchIndex({
+      models: [
+        { name: "zeta" },
+        null,
+        { description: "no name" },
+        {
+          name: "alpha",
+          caps: ["x", 1],
+          rank: "3",
+          tags: [{ name: "alpha:1" }, { summary: "?" }, 5],
+        },
+        { name: "first", rank: 1 },
+        { name: "first", rank: 9 },
+      ],
+    });
+    expect(parsed).toEqual([
+      { name: "first", description: "", capabilities: [], rank: 1, updated: null, tags: [] },
+      {
+        name: "alpha",
+        description: "",
+        capabilities: ["x"],
+        rank: null,
+        updated: null,
+        tags: [{ name: "alpha:1", summary: "" }],
+      },
+      { name: "zeta", description: "", capabilities: [], rank: null, updated: null, tags: [] },
+    ]);
+  });
+
+  test("throws when the index has no models array", () => {
+    expect(() => parseOllayaSearchIndex({})).toThrow(/models array/);
+    expect(() => parseOllayaSearchIndex(null)).toThrow(/models array/);
   });
 });

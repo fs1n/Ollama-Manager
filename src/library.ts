@@ -195,3 +195,72 @@ export function parseLibraryDetailHtml(html: string, name: string): LibraryModel
 
   return { name, tags, pulls, updatedText, updatedAt };
 }
+
+// =============================================================================
+// ollaya.dev catalog
+// =============================================================================
+//
+// ollaya.dev publishes its model list as a static JSON index (/search.json,
+// built for the site's typeahead). It is not a formal API, so every field is
+// read defensively: a model without a usable name is dropped, anything else
+// falls back to an empty value instead of failing the whole catalog.
+
+export interface OllayaCatalogTag {
+  /** Full pullable name, e.g. "laya:en" */
+  name: string;
+  summary: string;
+}
+
+export interface OllayaCatalogModel {
+  name: string;
+  description: string;
+  /** ollaya.dev's labels, e.g. "decision", "multilingual", "gguf" */
+  capabilities: string[];
+  /** Editorial order (ollaya.dev has no pull counts); lower comes first */
+  rank: number | null;
+  /** "YYYY-MM-DD" as published, or null */
+  updated: string | null;
+  tags: OllayaCatalogTag[];
+}
+
+const asString = (v: unknown): string => (typeof v === "string" ? v : "");
+
+export function parseOllayaSearchIndex(data: unknown): OllayaCatalogModel[] {
+  const models = (data as { models?: unknown } | null)?.models;
+  if (!Array.isArray(models)) throw new Error("ollaya.dev index has no models array");
+
+  const out: OllayaCatalogModel[] = [];
+  const seen = new Set<string>();
+  for (const raw of models) {
+    if (!raw || typeof raw !== "object") continue;
+    const m = raw as Record<string, unknown>;
+    const name = asString(m.name).trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+
+    const tags = Array.isArray(m.tags)
+      ? m.tags
+          .map((t) => t as Record<string, unknown> | null)
+          .filter((t): t is Record<string, unknown> => !!t && typeof t === "object")
+          .map((t) => ({ name: asString(t.name).trim(), summary: asString(t.summary) }))
+          .filter((t) => t.name)
+      : [];
+
+    out.push({
+      name,
+      description: asString(m.description),
+      capabilities: Array.isArray(m.caps) ? m.caps.filter((c) => typeof c === "string") : [],
+      rank: typeof m.rank === "number" && Number.isFinite(m.rank) ? m.rank : null,
+      updated: asString(m.updated) || null,
+      tags,
+    });
+  }
+
+  // Ranked models first in editorial order, unranked ones after by name.
+  return out.sort((a, b) => {
+    if (a.rank !== null && b.rank !== null) return a.rank - b.rank;
+    if (a.rank !== null) return -1;
+    if (b.rank !== null) return 1;
+    return a.name.localeCompare(b.name);
+  });
+}

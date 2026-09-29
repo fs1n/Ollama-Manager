@@ -74,11 +74,26 @@ another terminal with `bun run dev:web` (watches and rebuilds on change) or a
 one-off `bun run build:web`. `bun test` doesn't go through `bun run`, so run
 `bun run build:web` once beforehand if `dist/public` doesn't exist yet.
 
+### Backends API
+
+Every configured backend is reachable under one scheme:
+
+| Route | Upstream |
+|-------|----------|
+| `GET /api/backends` | List of backends with status, version and capabilities |
+| `/api/backends/{id}/{path}` | `{host}/api/{path}` of that backend, e.g. `/api/backends/ollaya/decide` |
+| `/api/backends/ollaya/v1/{systemone,decisions,models}` | Ollaya's TypeSafe-compatible `/v1/*` |
+
+The original `/api/*` routes (e.g. `/api/tags`) still relay to Ollama but are deprecated in
+favor of `/api/backends/ollama/*`. Full reference at `/api/docs`.
+
 ### Environment variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `OLLAMA_HOST` | No | Ollama API endpoint (default: `http://localhost:11434`) |
+| `OLLAYA_HOST` | No | [Ollaya](https://github.com/ollaya-dev/ollaya) endpoint; enables the Ollaya backend. `http://` and port `11435` are assumed when omitted (default: unset) |
+| `OLLAYA_API_KEY` | No | Sent to Ollaya as `Authorization: Bearer …` when Ollaya runs with `OLLAYA_API_KEY`; never exposed to the browser (default: unset) |
 | `PORT` | No | HTTP server port (default: `3000`) (very optional, DONOT CHANGE WITHOUT AN ACTUAL NEED) |
 | `MASTER_KEY` | No | No, but consider Setting it for security |
 | `TRUST_PROXY` | No | Set to `1`/`true` **only** if a reverse proxy in front of this instance overwrites `X-Forwarded-For` - otherwise the login rate limiter uses the real socket address (default: unset) |

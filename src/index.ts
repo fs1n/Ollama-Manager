@@ -9,17 +9,37 @@ import {
   verifySessionToken,
 } from "./auth";
 import {
+  BACKEND_ID_RE,
+  type Backend,
+  backendCapabilities,
+  loadBackends,
+  parseBackendRoute,
+  probeBackend,
+  upstreamHeaders,
+  upstreamPathFor,
+} from "./backends";
+import {
   dedupeByName,
   hasNextSearchPage,
   type LibraryModel,
   type LibraryModelDetail,
+  type OllayaCatalogModel,
   parseLibraryDetailHtml,
   parseLibraryHtml,
+  parseOllayaSearchIndex,
 } from "./library";
 
 const MASTER_KEY = (process.env.MASTER_KEY || "").trim();
-const OLLAMA_HOST = (process.env.OLLAMA_HOST || "http://localhost:11434").replace(/\/$/, "");
-const OLLAMA_URL = new URL(OLLAMA_HOST);
+// Every model server the manager relays to (see src/backends.ts). Ollama is
+// always present; Ollaya joins when OLLAYA_HOST is set.
+const BACKENDS = loadBackends(process.env);
+const BACKENDS_BY_ID = new Map(BACKENDS.map((b) => [b.id, b]));
+const OLLAMA_BACKEND: Backend =
+  BACKENDS_BY_ID.get("ollama") ??
+  (() => {
+    throw new Error("loadBackends() must always return the Ollama backend");
+  })();
+const OLLAMA_HOST = OLLAMA_BACKEND.baseUrl;
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const SESSION_TTL = 24 * 60 * 60 * 1000; // 24 hours
 // Only trust the X-Forwarded-For header (used for login rate limiting) when the
@@ -152,7 +172,8 @@ const PROXY_CONNECT_TIMEOUT_MS = 600_000; // hard cap to receive the initial res
 // slow-but-still-progressing pull well before it finishes.
 const PROXY_IDLE_TIMEOUT_MS = 120_000;
 
-// Ollama endpoints whose responses stream long-lived NDJSON bodies. Only these
+// Upstream endpoints (Ollama and Ollaya alike) whose responses stream
+// long-lived NDJSON bodies, matched against the *upstream* path. Only these
 // get the idle-timeout body wrapper below — everything else returns a small
 // JSON body right after the headers, and wrapping it would put a JS-land
 // stream pump (reader, closures, timer churn) on the dashboard's hot polling
@@ -167,7 +188,7 @@ const STREAMING_API_PATHS = new Set([
 
 // Wraps an upstream body so it self-terminates after PROXY_IDLE_TIMEOUT_MS with no
 // new chunk, resetting the timer on every chunk received. onIdleTimeout() is used
-// to also abort the underlying upstream fetch so Ollama isn't left mid-request.
+// to also abort the underlying upstream fetch so the backend isn't left mid-request.
 function withIdleTimeout(
   body: ReadableStream<Uint8Array> | null,
   idleMs: number,
@@ -189,7 +210,7 @@ function withIdleTimeout(
     start(controller) {
       fireIdle = () => {
         onIdleTimeout();
-        controller.error(new Error("Idle timeout — no data received from Ollama"));
+        controller.error(new Error("Idle timeout — no data received from upstream"));
       };
       arm();
     },
@@ -215,20 +236,24 @@ function withIdleTimeout(
   });
 }
 
-async function forwardToOllama(req: Request): Promise<Response> {
-  const url = new URL(req.url);
-  const target = `${OLLAMA_HOST}${url.pathname}${url.search}`;
+type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
 
-  const headers = new Headers(req.headers);
-  headers.set("host", OLLAMA_URL.host);
-  // Strip browser-originated headers — the manager is the HTTP client to Ollama,
-  // and Ollama's OLLAMA_ORIGINS check would reject a non-localhost Origin.
-  headers.delete("origin");
-  headers.delete("referer");
-  // Ollama has no use for the manager's own session cookie — forwarding it
-  // upstream would leak the (httpOnly, otherwise browser-inaccessible)
-  // om_session token to a service that never needs to see it.
-  headers.delete("cookie");
+/**
+ * Relays a request to one backend. `upstreamPath` is the backend's own path
+ * (e.g. "/api/tags"), already validated by upstreamPathFor() or, for the legacy
+ * /api/* alias, the incoming path itself.
+ */
+export async function forwardToBackend(
+  req: Request,
+  backend: Backend,
+  upstreamPath: string,
+  fetchFn: FetchFn = fetch,
+): Promise<Response> {
+  const url = new URL(req.url);
+  const target = `${backend.baseUrl}${upstreamPath}${url.search}`;
+  // Strips Origin/Referer (the backends' origin checks would reject the
+  // manager's page) and the manager's own session, and swaps in Ollaya's key.
+  const headers = upstreamHeaders(req.headers, backend);
 
   const upstreamAbort = new AbortController();
   let connectTimedOut = false;
@@ -241,7 +266,7 @@ async function forwardToOllama(req: Request): Promise<Response> {
     : upstreamAbort.signal;
 
   try {
-    const resp = await fetch(target, {
+    const resp = await fetchFn(target, {
       method: req.method,
       headers,
       body: req.body,
@@ -251,7 +276,7 @@ async function forwardToOllama(req: Request): Promise<Response> {
 
     const proxyHeaders = new Headers(resp.headers);
     proxyHeaders.set("Cache-Control", "no-store");
-    const body = STREAMING_API_PATHS.has(url.pathname)
+    const body = STREAMING_API_PATHS.has(upstreamPath)
       ? withIdleTimeout(resp.body, PROXY_IDLE_TIMEOUT_MS, () => upstreamAbort.abort())
       : resp.body;
     return new Response(body, {
@@ -263,8 +288,29 @@ async function forwardToOllama(req: Request): Promise<Response> {
     if (connectTimedOut) return jsonError("Upstream request timed out", 504);
     const name = (err as { name?: string })?.name;
     if (name === "AbortError") return new Response(null, { status: 499 });
-    return jsonError("Ollama unreachable");
+    return jsonError(`${backend.label} unreachable`);
   }
+}
+
+// Answers /api/backends/{id}/{rest}: unknown ids and paths the backend kind
+// doesn't allow are refused here, before anything goes upstream.
+function serveBackendRoute(req: Request, id: string, rest: string): Promise<Response> | Response {
+  const backend = BACKEND_ID_RE.test(id) ? BACKENDS_BY_ID.get(id) : undefined;
+  if (!backend) return jsonError("Unknown backend", 404);
+  const upstreamPath = upstreamPathFor(backend.kind, rest);
+  if (!upstreamPath) return jsonError(`Not available on ${backend.label}`, 404);
+  return forwardToBackend(req, backend, upstreamPath);
+}
+
+async function listBackends() {
+  const statuses = await Promise.all(BACKENDS.map((b) => probeBackend(b)));
+  return BACKENDS.map((b, i) => ({
+    id: b.id,
+    kind: b.kind,
+    label: b.label,
+    capabilities: backendCapabilities(b.kind),
+    ...statuses[i],
+  }));
 }
 
 let libraryCache: LibraryModel[] | null = null;
@@ -275,8 +321,6 @@ let libraryInflight: Promise<LibraryModel[]> | null = null;
 const SCRAPE_HEADERS = {
   "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
 };
-
-type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
 
 /** Dedupes consecutive pages only — returns false as soon as a page repeats cards. */
 async function scrapeSearchFallback(fetchFn: FetchFn): Promise<LibraryModel[]> {
@@ -441,6 +485,49 @@ async function serveLibraryDetail(name: string): Promise<Response> {
     const stale = detailCache.get(name);
     if (stale) return Response.json({ ...stale.data, stale: true });
     return jsonError("Failed to fetch model details");
+  }
+}
+
+// ollaya.dev catalog: a static JSON index, so one fetch per hour is plenty.
+// A failed refresh keeps serving the previous list (marked stale).
+const OLLAYA_CATALOG_URL = "https://ollaya.dev/search.json";
+let ollayaCatalogCache: OllayaCatalogModel[] | null = null;
+let ollayaCatalogTime = 0;
+let ollayaCatalogInflight: Promise<OllayaCatalogModel[]> | null = null;
+
+export async function fetchOllayaCatalog(fetchFn: FetchFn = fetch): Promise<OllayaCatalogModel[]> {
+  const resp = await fetchFn(OLLAYA_CATALOG_URL, {
+    headers: { Accept: "application/json" },
+    credentials: "omit",
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const models = parseOllayaSearchIndex(await resp.json());
+  if (models.length === 0) throw new Error("ollaya.dev index parsed to 0 models");
+  return models;
+}
+
+async function serveOllayaCatalog(): Promise<Response> {
+  const age = Date.now() - ollayaCatalogTime;
+  if (ollayaCatalogCache && age < LIBRARY_TTL) {
+    return Response.json({ models: ollayaCatalogCache, cached: age < 5000, stale: false });
+  }
+  try {
+    if (!ollayaCatalogInflight) {
+      ollayaCatalogInflight = fetchOllayaCatalog().finally(() => {
+        ollayaCatalogInflight = null;
+      });
+    }
+    const models = await ollayaCatalogInflight;
+    ollayaCatalogCache = models;
+    ollayaCatalogTime = Date.now();
+    return Response.json({ models, cached: true, stale: false });
+  } catch (err) {
+    log("warn", "ollaya.dev catalog fetch failed", { error: String(err) });
+    if (ollayaCatalogCache) {
+      return Response.json({ models: ollayaCatalogCache, cached: false, stale: true });
+    }
+    return jsonError("Failed to fetch ollaya.dev catalog");
   }
 }
 
@@ -643,7 +730,7 @@ const OPENAPI_SPEC = {
   info: {
     title: "Ollama Manager API",
     description:
-      "Lightweight web UI for managing Ollama. All `/api/*` paths not listed below are transparently proxied to the configured Ollama instance.",
+      "Lightweight web UI for managing Ollama and Ollaya. Each configured backend is reachable under `/api/backends/{id}/…`. Deprecated: `/api/*` paths not listed below are still relayed to Ollama as an alias for `/api/backends/ollama/*`.",
     version: VERSION,
   },
   components: {
@@ -757,6 +844,152 @@ const OPENAPI_SPEC = {
               },
             },
           },
+        },
+      },
+    },
+    "/api/backends": {
+      get: {
+        summary: "Configured backends",
+        description:
+          "Every model server the manager relays to, probed live (2s timeout each). Ollama is always listed; Ollaya when OLLAYA_HOST is set.",
+        tags: ["Backends"],
+        responses: {
+          200: {
+            description: "Backend list",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    backends: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          id: { type: "string", example: "ollaya" },
+                          kind: { type: "string", enum: ["ollama", "ollaya"] },
+                          label: { type: "string", example: "Ollaya" },
+                          capabilities: {
+                            type: "array",
+                            items: {
+                              type: "string",
+                              enum: [
+                                "chat",
+                                "generate",
+                                "embed",
+                                "create-modelfile",
+                                "decide",
+                                "create-questions",
+                              ],
+                            },
+                          },
+                          status: { type: "string", enum: ["connected", "unreachable"] },
+                          version: { type: "string", nullable: true },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/backends/{id}/{path}": {
+      summary: "Relay to one backend",
+      description:
+        "Relays the request to `{baseUrl}/api/{path}` of backend `{id}` (e.g. `/api/backends/ollaya/decide` → Ollaya `/api/decide`). For Ollaya, `v1/systemone`, `v1/decisions` and `v1/models` map to its TypeSafe-compatible `/v1/*`. Ollaya only accepts its documented endpoints (version, tags, ps, show, pull, delete, copy, create, decide); other paths and unknown ids return 404. Request and response bodies are the backend's own.",
+      parameters: [
+        {
+          name: "id",
+          in: "path",
+          required: true,
+          schema: { type: "string", pattern: "^[a-z0-9-]+$", example: "ollama" },
+        },
+        {
+          name: "path",
+          in: "path",
+          required: true,
+          schema: { type: "string", example: "tags" },
+        },
+      ],
+      get: {
+        summary: "Relay GET",
+        tags: ["Backends"],
+        responses: {
+          200: { description: "Backend response" },
+          404: { description: "Unknown backend, or path not available on it" },
+          502: { description: "Backend unreachable" },
+        },
+      },
+      post: {
+        summary: "Relay POST",
+        tags: ["Backends"],
+        responses: {
+          200: { description: "Backend response (NDJSON stream for pull/create)" },
+          404: { description: "Unknown backend, or path not available on it" },
+          502: { description: "Backend unreachable" },
+        },
+      },
+      delete: {
+        summary: "Relay DELETE",
+        tags: ["Backends"],
+        responses: {
+          200: { description: "Backend response" },
+          404: { description: "Unknown backend, or path not available on it" },
+          502: { description: "Backend unreachable" },
+        },
+      },
+    },
+    "/api/catalog/ollaya": {
+      get: {
+        summary: "ollaya.dev catalog",
+        description:
+          "Models listed on ollaya.dev, read from its static /search.json index and cached in memory for 1h.",
+        tags: ["Catalog"],
+        responses: {
+          200: {
+            description: "Model list, in ollaya.dev's editorial order",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    models: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          name: { type: "string", example: "laya" },
+                          description: { type: "string" },
+                          capabilities: { type: "array", items: { type: "string" } },
+                          rank: { type: "number", nullable: true },
+                          updated: { type: "string", nullable: true, example: "2026-09-23" },
+                          tags: {
+                            type: "array",
+                            items: {
+                              type: "object",
+                              properties: {
+                                name: { type: "string", example: "laya:en" },
+                                summary: { type: "string" },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                    cached: { type: "boolean" },
+                    stale: {
+                      type: "boolean",
+                      description: "True if the refresh failed and an older list is served.",
+                    },
+                  },
+                },
+              },
+            },
+          },
+          502: { description: "ollaya.dev unreachable and nothing cached" },
         },
       },
     },
@@ -949,6 +1182,17 @@ const OPENAPI_SPEC = {
                     status: { type: "string", example: "ok" },
                     ollama: { type: "string", enum: ["connected", "unreachable"] },
                     ollamaVersion: { type: "string", nullable: true },
+                    backends: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          id: { type: "string" },
+                          status: { type: "string", enum: ["connected", "unreachable"] },
+                          version: { type: "string", nullable: true },
+                        },
+                      },
+                    },
                   },
                 },
               },
@@ -1121,22 +1365,21 @@ async function handleRequest(req: Request, server: Bun.Server<undefined>): Promi
   }
 
   // Health (public — needed for Docker HEALTHCHECK)
-  // Manager always returns 200 (it's running); ollama field shows upstream state.
+  // Manager always returns 200 (it's running); the backend fields show upstream
+  // state. `ollama`/`ollamaVersion` stay for existing health checks.
   if (url.pathname === "/health") {
-    let ollamaStatus = "unreachable";
-    let ollamaVersion: string | null = null;
-    try {
-      const r = await fetch(`${OLLAMA_HOST}/api/version`, { signal: AbortSignal.timeout(2_000) });
-      if (r.ok) {
-        const d = (await r.json()) as { version?: string };
-        ollamaStatus = "connected";
-        ollamaVersion = d.version ?? null;
-      }
-    } catch (e: unknown) {
-      const reason = e instanceof Error ? e.message : String(e);
-      log("warn", "Health check upstream probe failed", { error: reason });
+    const statuses = await Promise.all(BACKENDS.map((b) => probeBackend(b)));
+    const backends = BACKENDS.map((b, i) => ({ id: b.id, ...statuses[i] }));
+    for (const b of backends) {
+      if (b.status !== "connected") log("warn", "Health check upstream probe failed", { id: b.id });
     }
-    return Response.json({ status: "ok", ollama: ollamaStatus, ollamaVersion });
+    const ollama = backends.find((b) => b.id === OLLAMA_BACKEND.id);
+    return Response.json({
+      status: "ok",
+      ollama: ollama?.status ?? "unreachable",
+      ollamaVersion: ollama?.version ?? null,
+      backends,
+    });
   }
 
   // OpenAPI spec (public)
@@ -1176,7 +1419,27 @@ async function handleRequest(req: Request, server: Bun.Server<undefined>): Promi
     }
   }
 
+  // Backend registry and the per-backend relay (/api/backends/{id}/…)
+  if (url.pathname === "/api/backends") {
+    if (req.method !== "GET") return jsonError("Method not allowed", 405);
+    return Response.json(
+      { backends: await listBackends() },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  }
+  const backendRoute = parseBackendRoute(url.pathname);
+  if (backendRoute) {
+    return serveBackendRoute(req, backendRoute.id, backendRoute.rest);
+  }
+  if (url.pathname.startsWith("/api/backends/")) {
+    return jsonError("Not found", 404);
+  }
+
   // API routes
+  if (url.pathname === "/api/catalog/ollaya" && req.method === "GET") {
+    return serveOllayaCatalog();
+  }
+
   if (url.pathname === "/api/catalog/library") {
     return serveLibrary();
   }
@@ -1202,19 +1465,22 @@ async function handleRequest(req: Request, server: Bun.Server<undefined>): Promi
     return Response.json(getLiteLLMStatus());
   }
 
-  return forwardToOllama(req);
+  // Legacy alias: the original un-prefixed /api/* routes keep relaying to
+  // Ollama for existing API clients (deprecated in favor of
+  // /api/backends/ollama/*, which the web UI uses).
+  return forwardToBackend(req, OLLAMA_BACKEND, url.pathname);
 }
 
 log("info", "Ollama Manager started", {
   port: PORT,
-  ollama: OLLAMA_HOST,
+  backends: BACKENDS.map((b) => ({ id: b.id, url: b.baseUrl, apiKey: !!b.apiKey })),
   auth: !!MASTER_KEY,
   litellm: LITELLM_ENABLED,
 });
 if (!MASTER_KEY) {
   log(
     "warn",
-    "MASTER_KEY is not set — the manager is an open, unauthenticated proxy to the full Ollama API " +
+    `MASTER_KEY is not set — the manager is an open, unauthenticated proxy to the full API of ${BACKENDS.map((b) => b.label).join(" and ")} ` +
       "(pull/delete/create/inference) for anyone who can reach this port. Set MASTER_KEY unless this " +
       "instance is on a fully trusted, non-internet-facing network.",
   );

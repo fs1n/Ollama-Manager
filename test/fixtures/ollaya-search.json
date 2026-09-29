@@ -1,0 +1,72 @@
+{
+  "models": [
+    {
+      "name": "winnow",
+      "href": "/library/winnow",
+      "description": "Decision models by EldanRing, fine-tuned from Google's Gemma 4 and published as GGUF. Winnow reads the answer labels' logits after its own prompt; Ollaya runs the author's file on llama.cpp, on NVIDIA GPUs, Apple silicon or the CPU.",
+      "search": "winnow winnow decision models by eldanring, fine-tuned from ",
+      "caps": [
+        "decision",
+        "multilingual",
+        "fine-tuned",
+        "gguf"
+      ],
+      "rank": 1,
+      "updated": "2026-09-24",
+      "tags": [
+        {
+          "name": "winnow:latest",
+          "href": "/library/winnow:latest",
+          "summary": "Same as winnow:12b.",
+          "search": "winnow:latest 100+ languages "
+        },
+        {
+          "name": "winnow:12b",
+          "href": "/library/winnow:12b",
+          "summary": "Winnow-12B, Q8_0 GGUF: 0.702 on typed decisions, 85.7 % on the author's JevBench set; a 16 GB GPU holds it.",
+          "search": "winnow:12b 100+ languages "
+        },
+        {
+          "name": "winnow:e4b",
+          "href": "/library/winnow:e4b",
+          "summary": "Winnow-E4B, Q8_0 GGUF, with the author's fitted temperature: 0.722 on typed decisions in 89 ms on an RTX 4090. Ollaya's recommended model.",
+          "search": "winnow:e4b 100+ languages "
+        }
+      ]
+    },
+    {
+      "name": "laya",
+      "href": "/library/laya",
+      "description": "Open decision models from Convai Innovations. Typed, calibrated answers to choice, score and yes/no questions in a single forward pass, in English and 100+ languages.",
+      "search": "laya laya open decision models from convai innovations. type",
+      "caps": [
+        "multilingual",
+        "router",
+        "guardrails",
+        "fine-tuned"
+      ],
+      "rank": 2,
+      "updated": "2026-09-23",
+      "tags": [
+        {
+          "name": "laya:en",
+          "href": "/library/laya:en",
+          "summary": "English. Best for guardrails and email triage.",
+          "search": "laya:en english modernbert-large"
+        },
+        {
+          "name": "laya:multilingual",
+          "href": "/library/laya:multilingual",
+          "summary": "100+ languages, 1024-token context; up to ~2.2× faster on batched calls.",
+          "search": "laya:multilingual 100+ languages mmbert-"
+        },
+        {
+          "name": "laya:typed-decisions",
+          "href": "/library/laya:typed-decisions",
+          "summary": "Fine-tuned on typed-decisions workflows: 0.766 accuracy vs 0.727 published for Jev 1.13.",
+          "search": "laya:typed-decisions english modernbert-"
+        }
+      ]
+    }
+  ]
+}
